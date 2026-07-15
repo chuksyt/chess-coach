@@ -1,0 +1,20 @@
+# --- Chess engines & neural-net weights (large, third-party, separately licensed) ---
+# These are NOT committed. Run `maia/setup-maia.ps1` to download them.
+maia/lc0/
+maia/stockfish/
+maia/weights/
+
+# Downloaded archives left behind by the setup script
+maia/*.zip
+*.pb.gz
+
+# Python
+__pycache__/
+*.pyc
+
+# Personal / machine-specific Claude Code settings
+.claude/settings.local.json
+
+# OS cruft
+Thumbs.db
+.DS_Store

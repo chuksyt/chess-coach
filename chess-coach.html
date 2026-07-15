@@ -1,0 +1,1926 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chess Coach — Best Moves For Your Rating</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#171b21; --panel2:#1e242c; --line:#2a323c;
+    --text:#e8edf2; --muted:#9aa7b4; --accent:#6ea8fe; --good:#4ade80;
+    --warn:#fbbf24; --bad:#f87171; --light:#e9edcc; --dark:#6f8a5a;
+    --sel:#f5d76e; --hint:rgba(110,168,254,.55);
+  }
+  @media (prefers-color-scheme: light){
+    :root{--bg:#f3f5f8;--panel:#fff;--panel2:#eef1f5;--line:#dde3ea;--text:#141a20;--muted:#5a6672;--light:#eeeed2;--dark:#7ba05b;}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);padding:18px}
+  h1{font-size:20px;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+  .topnav{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:6px 8px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .topnav .modes{display:flex;gap:4px;flex-wrap:wrap}
+  .topnav .modes button{background:transparent;border:1px solid transparent;padding:8px 15px;border-radius:8px;font-weight:600}
+  .topnav .modes button.active{background:var(--accent);color:#04122e;border-color:var(--accent)}
+  .topnav .modes button:not(.active):hover{background:var(--panel2)}
+  .topnav .tools{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+  .topnav .tools button{padding:7px 11px;font-size:13px}
+  .ctrl.row{margin-bottom:12px}
+  #ctrl-review textarea{width:100%}
+  #puzreview{margin-bottom:12px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  #puzreview .pnav{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+  #puzreview .pline{font-size:14px;line-height:2}
+  .pmove{cursor:pointer;padding:1px 6px;border-radius:5px}
+  .pmove:hover{background:var(--line)}
+  .pmove.solver{font-weight:700;color:var(--text)}
+  .pmove.cur{background:var(--accent);color:#04122e}
+  .pnum{color:var(--muted);font-size:12px;margin-left:4px}
+  .wrap{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
+  /* Wooden board theme */
+  .boardcol{flex:0 0 auto}
+  .boardrow{display:flex;gap:8px;align-items:stretch}
+  #evalbar{position:relative;width:22px;flex:0 0 auto;border-radius:6px;overflow:hidden;
+    background:#2b2b2b;border:1px solid var(--line)}
+  #evalfill{position:absolute;left:0;right:0;bottom:0;height:50%;background:#f4f4f4;transition:height .35s ease, top .35s ease, bottom .35s ease}
+  #evalnum{position:absolute;left:50%;bottom:3px;transform:translateX(-50%);font-size:9px;font-weight:800;
+    padding:1px 3px;border-radius:3px;background:rgba(0,0,0,.6);color:#fff;white-space:nowrap;letter-spacing:-.02em}
+  .boardwrap{position:relative;width:min(88vw,440px);aspect-ratio:1;border:10px solid #5a3a1c;border-radius:8px;overflow:hidden;
+    box-shadow:0 6px 22px rgba(0,0,0,.45), inset 0 0 0 1px rgba(0,0,0,.35);
+    background:linear-gradient(135deg,#6b4423,#3f2812);}
+  #board{position:absolute;inset:0;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);user-select:none;touch-action:none}
+  .sq.over{box-shadow:inset 0 0 0 4px rgba(255,255,255,.65)}
+  img.drag-ghost{position:fixed;z-index:50;pointer-events:none;filter:drop-shadow(0 6px 6px rgba(0,0,0,.5));cursor:grabbing}
+  #arrows{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5}
+  .sq{position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer;line-height:1}
+  /* light & dark wood with a faint grain */
+  .sq.l{background:
+    repeating-linear-gradient(96deg, rgba(120,72,30,.05) 0 3px, rgba(120,72,30,0) 3px 9px),
+    linear-gradient(160deg,#eecb93,#e0b878);}
+  .sq.d{background:
+    repeating-linear-gradient(96deg, rgba(50,28,8,.10) 0 3px, rgba(50,28,8,0) 3px 9px),
+    linear-gradient(160deg,#ad7844,#9a6636);}
+  .sq.sel{box-shadow:inset 0 0 0 4px var(--sel)}
+  .sq.premv{box-shadow:inset 0 0 0 5px rgba(255,120,30,.9)}   /* queued premove squares */
+  .sq.pmsel{box-shadow:inset 0 0 0 5px rgba(255,120,30,.55)}  /* premove source being chosen */
+  .sq .dot{position:absolute;width:26%;height:26%;border-radius:50%;background:var(--hint)}
+  .sq.cap .dot{width:82%;height:82%;background:transparent;border:5px solid var(--hint);border-radius:50%}
+  img.pc{width:100%;height:100%;pointer-events:none;
+    filter:drop-shadow(0 2px 2px rgba(0,0,0,.35));}
+  /* coordinate labels, Lichess-style: file letters on bottom edge, ranks on left edge */
+  .coord{position:absolute;font-size:min(2.2vw,11px);font-weight:700;line-height:1;pointer-events:none;user-select:none}
+  .coord.file{right:3px;bottom:2px}
+  .coord.rank{left:2px;top:2px}
+  .sq.l .coord{color:#9a6636}   /* dark ink on light squares */
+  .sq.d .coord{color:#eecb93}   /* light ink on dark squares */
+  .controls{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px}
+  button,select,input,textarea{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 11px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button:disabled:hover{border-color:var(--line)}
+  button.primary{background:var(--accent);color:#04122e;border-color:var(--accent);font-weight:600}
+  input[type=text]{cursor:text;min-width:200px}
+  textarea{cursor:text;width:min(88vw,440px);resize:vertical;font-size:12px}
+  .panel{flex:1 1 360px;min-width:320px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:3px}
+  .turn{font-size:13px;color:var(--muted);margin-bottom:10px}
+  .rec{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--panel2)}
+  .rec.top{border-color:var(--good);box-shadow:0 0 0 1px var(--good) inset}
+  .rec .mv{font-size:19px;font-weight:700}
+  .rec .why{font-size:13px;color:var(--muted);margin-top:4px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:12px}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .legend i{width:16px;height:4px;border-radius:2px;display:inline-block}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .badge{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
+  .b-sound{color:var(--good);border-color:var(--good)}
+  .b-pop{color:var(--accent);border-color:var(--accent)}
+  .b-win{color:var(--good);border-color:var(--good)}
+  .b-warn{color:var(--warn);border-color:var(--warn)}
+  .b-bad{color:var(--bad);border-color:var(--bad)}
+  .sectitle{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:16px 0 8px}
+  .engine{font-size:13px;color:var(--muted)}
+  .engine b{color:var(--text)}
+  .status{font-size:12px;color:var(--muted);margin-top:6px;min-height:16px}
+  .warnbox{border:1px solid var(--warn);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px}
+  .warnbox .mv{font-weight:700;color:var(--warn)}
+  a{color:var(--accent)}
+  .foot{font-size:11px;color:var(--muted);margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+  /* Position editor — sits beside the board (its own .wrap column), wraps under it when narrow */
+  #editor{display:none;flex:0 0 auto;align-self:flex-start;width:min(88vw,300px);
+    padding:14px;border:1px solid var(--accent);border-radius:12px;background:var(--panel2)}
+  #palette{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:10px 0}
+  .pbtn{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:8px;background:var(--panel);cursor:pointer;padding:4px}
+  .pbtn:hover{border-color:var(--accent)}
+  .pbtn.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+  .pbtn img{width:100%;height:100%;pointer-events:none}
+  .pbtn.erase{font-size:22px;grid-column:span 6;aspect-ratio:auto;padding:8px}
+  .edrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0 0}
+  .edturn{font-size:13px;color:var(--text);display:flex;align-items:center;gap:4px;margin:0}
+  body.editing .boardwrap{box-shadow:0 0 0 3px var(--accent), 0 6px 22px rgba(0,0,0,.45)}
+  body.editing .sq{cursor:crosshair}
+  /* Progress dashboard (modal overlay) */
+  #progressview{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:4vh 3vw}
+  .pv-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:min(760px,96vw);padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .pv-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .pv-foot{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:12px}
+  .pv-reset{margin-left:auto;font-size:12px;color:#f87171;background:none;border:1px solid #f8717155}
+  .pv-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px}
+  .pv-tile{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .pv-tile b{display:block;font-size:24px;line-height:1.1}
+  .pv-tile span{font-size:12px;color:var(--muted)}
+  .pv-sec{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:16px 0 8px}
+  .pv-bar{display:flex;align-items:center;gap:10px;margin:6px 0}
+  .pv-bar .lbl{width:130px;font-size:13px;text-transform:capitalize}
+  .pv-bar .track{flex:1;height:12px;background:var(--panel2);border-radius:6px;overflow:hidden}
+  .pv-bar .fill{height:100%;border-radius:6px}
+  .pv-bar .pct{width:78px;text-align:right;font-size:12px;color:var(--muted)}
+  .pv-plan{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+  .pv-plan li{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:12px}
+  .pv-plan .txt{flex:1;font-size:13px}
+  .pv-plan button{white-space:nowrap}
+  .pv-empty{color:var(--muted);font-size:13px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px}
+  #conceptsview{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:4vh 3vw}
+  .cpt{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+  .cpt-h{display:flex;align-items:center;gap:10px}
+  .cpt-h b{font-size:14px}
+  .cpt-h button{margin-left:auto}
+  .cpt-d{font-size:13px;color:var(--muted);margin-top:4px;line-height:1.5}
+  /* Openings library */
+  #openingsbox .op-intro{font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5}
+  .op-search{width:100%;margin-bottom:12px}
+  .op-group{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:16px 0 8px}
+  .op-card{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:8px;background:var(--panel2);cursor:pointer;transition:border-color .12s}
+  .op-card:hover{border-color:var(--accent)}
+  .op-card .op-name{font-weight:700;font-size:15px}
+  .op-card .op-eco{font-size:11px;color:var(--muted);font-weight:500;margin-left:6px}
+  .op-card .op-sum{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.45}
+  .op-back{font-size:12px;color:var(--accent);cursor:pointer;display:inline-block;margin-bottom:8px}
+  .op-title{font-weight:700;font-size:18px}
+  .op-side{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);margin-left:8px;vertical-align:middle}
+  .op-ideas{list-style:none;padding:0;margin:10px 0 4px}
+  .op-ideas li{position:relative;padding:4px 0 4px 18px;font-size:13px;color:var(--muted);line-height:1.45}
+  .op-ideas li::before{content:'▸';position:absolute;left:0;color:var(--accent)}
+  .op-lines{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+  .op-linebtn{font-size:12.5px;padding:5px 10px}
+  .op-linebtn.sel{background:var(--accent);color:#04122e;border-color:var(--accent);font-weight:600}
+  .op-linenote{font-size:12.5px;color:var(--muted);margin-bottom:8px}
+  .op-note{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin:10px 0;background:var(--panel2);min-height:44px;font-size:14px;line-height:1.5}
+  .op-note .op-mvname{font-weight:700;color:var(--good);margin-right:6px}
+  .op-moves{font-size:13.5px;line-height:2;margin-top:6px}
+  .op-progress{font-size:12px;color:var(--muted);margin:4px 0 2px}
+</style>
+
+<h1>♞ Chess Coach — best moves <em>for your rating</em></h1>
+<div class="sub">Not the elite engine line — the strongest move real players at your level actually find and win with.</div>
+
+<nav class="topnav">
+  <div class="modes">
+    <button data-mode="coach" class="active">🧭 Coach</button>
+    <button data-mode="openings">📚 Openings</button>
+    <button data-mode="puzzles">🧩 Puzzles</button>
+    <button data-mode="play">♟ Play vs Maia</button>
+    <button data-mode="review">📖 Review game</button>
+  </div>
+  <div class="tools">
+    <button id="flip" title="Flip the board">⇅ Flip</button>
+    <button id="undo" title="Undo / step back">↶ Undo</button>
+    <button id="setup" title="Set up a position">✎ Set up</button>
+    <button id="conceptsbtn" title="Concepts glossary">📖 Concepts</button>
+    <button id="progressbtn" title="Your progress & study plan">📊 Progress</button>
+    <button id="soundbtn" title="Toggle move sounds">🔊</button>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="boardcol">
+    <div class="boardrow">
+      <div id="evalbar" title="Stockfish evaluation (white advantage fills upward)">
+        <div id="evalfill"></div>
+        <span id="evalnum">0.0</span>
+      </div>
+      <div class="boardwrap">
+        <div id="board"></div>
+        <svg id="arrows" viewBox="0 0 8 8" preserveAspectRatio="none"></svg>
+      </div>
+    </div>
+  </div>
+
+  <div id="editor">
+    <div style="font-weight:600;margin-bottom:2px">✎ Set up a position</div>
+    <div style="font-size:12px;color:var(--muted)">Click a piece below, then click board squares to place it. Right-click a square to erase.</div>
+    <div id="palette"></div>
+    <div class="edrow">
+      <span style="font-size:12px;color:var(--muted)">Side to move:</span>
+      <label class="edturn"><input type="radio" name="edturn" value="w" checked> White</label>
+      <label class="edturn"><input type="radio" name="edturn" value="b"> Black</label>
+    </div>
+    <div class="edrow">
+      <button id="ed-clear">Clear board</button>
+      <button id="ed-startpos">Starting position</button>
+      <span style="flex:1"></span>
+      <button id="ed-cancel">Cancel</button>
+      <button class="primary" id="ed-apply">✓ Start analysis</button>
+    </div>
+  </div>
+
+  <div id="progressview" style="display:none">
+    <div class="pv-card">
+      <div class="pv-head">
+        <div style="font-weight:700;font-size:17px">📊 My Progress</div>
+        <button id="progressclose" style="margin-left:auto">✕ Close</button>
+      </div>
+      <div id="progressbody"></div>
+      <div class="pv-foot">
+        Tracked locally in your browser (nothing leaves this machine).
+        <button id="progressreset" class="pv-reset">Reset all progress</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="conceptsview" style="display:none">
+    <div class="pv-card">
+      <div class="pv-head">
+        <div style="font-weight:700;font-size:17px">📖 Chess Concepts</div>
+        <button id="conceptsclose" style="margin-left:auto">✕ Close</button>
+      </div>
+      <div id="conceptsbody"></div>
+      <div class="pv-foot">Learn the idea, then hit <b>Drill</b> to practice it on real puzzles.</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <!-- Rating band is shared by every mode -->
+    <div class="row">
+      <div>
+        <label>Your rating band</label>
+        <select id="rating">
+          <option value="1000,1200">1000–1200</option>
+          <option value="1200,1400" selected>1200–1400</option>
+          <option value="1400,1600">1400–1600</option>
+          <option value="1600,1800">1600–1800</option>
+          <option value="1800,2000">1800–2000</option>
+          <option value="2000,2200">2000–2200</option>
+        </select>
+      </div>
+      <div id="ctrl-coach-speed">
+        <label>Time control</label>
+        <select id="speed">
+          <option value="blitz,rapid" selected>Blitz + Rapid</option>
+          <option value="rapid,classical">Rapid + Classical</option>
+          <option value="bullet,blitz">Bullet + Blitz</option>
+        </select>
+      </div>
+      <div id="ctrl-puzzles-diff" style="display:none">
+        <label>Difficulty <span style="text-transform:none">(vs your band)</span></label>
+        <select id="difficulty">
+          <option value="easy">Easy</option>
+          <option value="medium" selected>Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </div>
+      <div id="ctrl-play-color" style="display:none">
+        <label>Play as</label>
+        <select id="playcolor"><option value="w">White</option><option value="b">Black</option></select>
+      </div>
+    </div>
+
+    <!-- Per-mode action rows -->
+    <div class="ctrl row" id="ctrl-coach">
+      <button class="primary" id="analyze">↻ Re-analyze</button>
+      <button id="reset">↺ Start position</button>
+      <input type="text" id="fen" placeholder="…or paste a FEN to load a position">
+      <button id="loadfen">Load FEN</button>
+    </div>
+    <div class="ctrl row" id="ctrl-puzzles" style="display:none">
+      <button id="hintbtn">💡 Hint</button>
+      <button id="solutionbtn">👁 Solution</button>
+      <button class="primary" id="nextpuzzlebtn">➡ Next puzzle</button>
+    </div>
+    <div class="ctrl row" id="ctrl-play" style="display:none">
+      <button class="primary" id="playbtn">▶ Start game</button>
+    </div>
+    <div class="ctrl" id="ctrl-review" style="display:none">
+      <textarea id="pgn" rows="3" placeholder="Paste the PGN of a finished game to review it move by move…"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="loadpgn">Load game</button>
+        <span id="nav" style="display:none;gap:6px;align-items:center">
+          <button id="first" title="Start">⏮</button>
+          <button id="prev" title="Previous move">◀</button>
+          <span id="movelabel" style="font-size:13px;color:var(--muted);min-width:120px;text-align:center"></span>
+          <button id="next" title="Next move">▶</button>
+          <button id="last" title="End">⏭</button>
+        </span>
+      </div>
+    </div>
+
+    <div class="ctrl row" id="ctrl-openings" style="display:none">
+      <button id="op-list" title="Back to the opening library">⟵ All openings</button>
+      <button id="op-restart" title="Restart this line">⏮ Restart</button>
+      <button id="op-prev" title="Previous move">◀</button>
+      <button class="primary" id="op-next" title="Next move">▶ Next</button>
+      <button id="op-arrow" title="Show or hide the teal theory-move arrow">👁 Book arrow: on</button>
+    </div>
+
+    <div id="puzreview" style="display:none"></div>
+    <div id="openingsbox" style="display:none"></div>
+    <div class="turn" id="turn"></div>
+    <div class="status" id="status">Make a move on the board — it re-analyzes automatically and shows the best move for your rating.</div>
+    <div id="results"></div>
+    <div class="foot">
+      <b>Maia</b> predicts what your level actually plays; <b>Stockfish</b> confirms which moves are sound — the move that is <b>both</b> is your best practical choice.
+      Needs the local server (<code>python maia_server.py</code>).
+    </div>
+  </div>
+</div>
+
+<!-- chess.js for legality/FEN, served locally by maia_server.py -->
+<script src="/chess.js"></script>
+<script src="/pieces.js"></script>
+<script src="/openings.js"></script>
+<script>
+const game = new Chess();
+let orient = 'w';
+let sel = null;        // selected square
+let legalTargets = []; // for selected square
+let lastArrows = [];   // recommendation arrows to keep drawn (survive flips)
+let review = null;     // {history:[verbose moves], startFen, id} when reviewing a PGN
+let reviewSeen = new Set();  // (gameId:ply) already counted, so re-navigating doesn't double-count
+let ply = 0;           // how many moves of the loaded game are on the board
+let premove = null;    // {from,to,promotion} queued for the side not to move
+let pmSel = null;      // premove source square during click-to-premove
+let play = { on:false, human:'w' };  // "Play vs Maia" mode
+let redo = [];         // moves stepped back in analysis mode, available to replay forward
+let editMode = false;  // position-setup editor active
+let editSel = null;    // current "brush": {type,color} piece, or 'erase', or null
+let editSnapshot = null; // FEN to restore if the editor is cancelled
+const analysisCache = new Map();  // fen|net|band|speeds|played -> {maia, eng, stats}
+
+const boardEl = document.getElementById('board');
+const arrowsEl = document.getElementById('arrows');
+const statusEl = document.getElementById('status');
+const resultsEl = document.getElementById('results');
+const turnEl = document.getElementById('turn');
+const evalFill = document.getElementById('evalfill');
+const evalNum = document.getElementById('evalnum');
+
+const GLYPH = {p:'♟',n:'♞',b:'♝',r:'♜',q:'♛',k:'♚'};
+const FILES = 'abcdefgh';
+const ALL_SQUARES = [].concat(...[8,7,6,5,4,3,2,1].map(r=>FILES.split('').map(f=>f+r)));
+
+// --- Evaluation bar (white advantage fills from the bottom; flips with the board) ---
+let evalCp = 0, evalLabel = '0.0';   // stored in WHITE's perspective (centipawns)
+function setEval(cpWhite, label){ evalCp = cpWhite; evalLabel = label; updateEvalBar(); }
+function updateEvalBar(){
+  const whitePct = 100/(1+Math.exp(-evalCp*0.004));   // centipawns -> % (win-prob-ish curve)
+  const h = Math.max(1.5, Math.min(98.5, whitePct));
+  evalFill.style.height = h+'%';
+  // white sits at the bottom normally, at the top when the board is flipped
+  evalFill.style.bottom = orient==='w' ? '0' : 'auto';
+  evalFill.style.top    = orient==='w' ? 'auto' : '0';
+  evalNum.textContent = evalLabel;
+}
+// Read Stockfish's root eval (from side-to-move) and store it white-relative.
+function setEvalFromEngine(eng, turn){
+  if(!eng || !eng.best) return;
+  const b = eng.best;
+  if(b.mate!=null){
+    const mateWhite = turn==='w' ? b.mate : -b.mate;
+    setEval(mateWhite>0 ? 100000 : -100000, 'M'+Math.abs(b.mate));
+  } else if(b.cp!=null){
+    const cpWhite = turn==='w' ? b.cp : -b.cp;
+    setEval(cpWhite, (cpWhite>0?'+':'') + (cpWhite/100).toFixed(1));
+  }
+}
+
+// --- Arrow overlay (coordinates in 0..8 square units, so it scales with the board) ---
+function sqCenter(sqName){
+  const f = FILES.indexOf(sqName[0]);          // 0..7 file
+  const r = +sqName[1];                          // 1..8 rank
+  const x = (orient==='w') ? f : 7-f;
+  const y = (orient==='w') ? 8-r : r-1;
+  return [x+0.5, y+0.5];
+}
+function drawArrows(){
+  const ns='http://www.w3.org/2000/svg';
+  arrowsEl.innerHTML='';
+  if(!lastArrows.length) return;
+  const defs=document.createElementNS(ns,'defs');
+  const seen=new Set();
+  for(const a of lastArrows){
+    if(seen.has(a.color)) continue; seen.add(a.color);
+    const m=document.createElementNS(ns,'marker');
+    m.setAttribute('id','ah-'+a.color.replace('#',''));
+    m.setAttribute('viewBox','0 0 10 10'); m.setAttribute('refX','7'); m.setAttribute('refY','5');
+    m.setAttribute('markerWidth','4'); m.setAttribute('markerHeight','4'); m.setAttribute('orient','auto-start-reverse');
+    const p=document.createElementNS(ns,'path');
+    p.setAttribute('d','M0,1 L9,5 L0,9 z'); p.setAttribute('fill',a.color);
+    m.appendChild(p); defs.appendChild(m);
+  }
+  arrowsEl.appendChild(defs);
+  for(const a of lastArrows){
+    const [x1,y1]=sqCenter(a.from), [x2,y2]=sqCenter(a.to);
+    // shorten the tail/head a touch so the arrow sits inside the squares
+    const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy)||1, ux=dx/len, uy=dy/len;
+    const sx=x1+ux*0.28, sy=y1+uy*0.28, ex=x2-ux*0.30, ey=y2-uy*0.30;
+    const line=document.createElementNS(ns,'line');
+    line.setAttribute('x1',sx); line.setAttribute('y1',sy);
+    line.setAttribute('x2',ex); line.setAttribute('y2',ey);
+    line.setAttribute('stroke',a.color); line.setAttribute('stroke-width',a.width);
+    line.setAttribute('stroke-linecap','round'); line.setAttribute('opacity',a.dash?0.85:0.92);
+    if(a.dash) line.setAttribute('stroke-dasharray','0.28 0.22');
+    line.setAttribute('marker-end','url(#ah-'+a.color.replace('#','')+')');
+    arrowsEl.appendChild(line);
+  }
+}
+function clearArrows(){ lastArrows=[]; drawArrows(); }
+
+function render(){
+  boardEl.innerHTML = '';
+  const rows = orient==='w' ? [8,7,6,5,4,3,2,1] : [1,2,3,4,5,6,7,8];
+  const cols = orient==='w' ? [0,1,2,3,4,5,6,7] : [7,6,5,4,3,2,1,0];
+  for(const r of rows){
+    for(const c of cols){
+      const sqName = FILES[c]+r;
+      const div = document.createElement('div');
+      const dark = (c + r) % 2 !== 0;   // a1 (file a=0, rank 1) is a DARK square — standard "light on the right"
+      div.className = 'sq ' + (dark?'d':'l');
+      div.dataset.sq = sqName;
+      const piece = game.get(sqName);
+      if(piece){
+        const img = document.createElement('img');
+        img.className = 'pc'; img.draggable = false; img.alt = sqName;
+        img.src = PIECES[piece.color + piece.type.toUpperCase()] || '';
+        div.appendChild(img);
+      }
+      // Coordinate labels on the board edges (official square naming, Lichess-style).
+      if(r === rows[rows.length-1]){
+        const f=document.createElement('span'); f.className='coord file'; f.textContent=FILES[c]; div.appendChild(f);
+      }
+      if(c === cols[0]){
+        const rk=document.createElement('span'); rk.className='coord rank'; rk.textContent=r; div.appendChild(rk);
+      }
+      if(sel===sqName) div.classList.add('sel');
+      if(pmSel===sqName) div.classList.add('pmsel');
+      if(premove && (premove.from===sqName || premove.to===sqName)) div.classList.add('premv');
+      if(legalTargets.includes(sqName)){
+        if(piece || isEnPassant(sqName)) div.classList.add('cap');
+        const dot=document.createElement('span'); dot.className='dot'; div.appendChild(dot);
+      }
+      boardEl.appendChild(div);
+    }
+  }
+  turnEl.textContent = (game.turn()==='w'?'White':'Black') + ' to move' +
+    (game.in_checkmate()?' — checkmate':game.in_check()?' — in check':'');
+  drawArrows();
+}
+
+function isEnPassant(sq){
+  return game.moves({verbose:true}).some(m=>m.from===sel && m.to===sq && m.flags.includes('e'));
+}
+
+function selectSquare(sq){
+  sel=sq;
+  legalTargets = game.moves({verbose:true}).filter(m=>m.from===sq).map(m=>m.to);
+}
+function deselect(){ sel=null; legalTargets=[]; }
+
+function makeMove(from, to){
+  if(op.on && op.opening) return opTryMove(from, to);   // Openings mode: only book moves advance
+  const moves = game.moves({verbose:true}).filter(m=>m.from===from && m.to===to);
+  if(!moves.length) return false;
+  let promo;
+  if(moves.some(m=>m.promotion)) promo = 'q'; // auto-queen for simplicity
+  game.move({from, to, promotion:promo});
+  soundForLast();
+  redo.length = 0;                          // a new move discards any forward history
+  exitReview(); deselect(); clearArrows(); render();
+  if(puzMode && puz && !puz.done){ checkPuzzleMove(); return true; }
+  if(play.on){
+    if(game.game_over()) showGameResult();
+    else maiaReply();            // opponent (Maia) answers your move
+  } else {
+    tryPremove();                // analysis mode: play a queued other-side premove
+    render(); analyze();
+  }
+  return true;
+}
+
+// ---- Premoves: queue a move for the side NOT to move; it auto-plays when it's their turn ----
+function setPremove(from, to){ premove = {from, to, promotion:'q'}; pmSel = null; render(); }
+function clearPremove(){ premove = null; pmSel = null; }
+function tryPremove(){
+  if(!premove) return false;
+  const pm = premove; premove = null;
+  const p = game.get(pm.from);
+  if(p && p.color===game.turn() &&
+     game.moves({verbose:true}).some(m=>m.from===pm.from && m.to===pm.to)){
+    game.move({from:pm.from, to:pm.to, promotion:pm.promotion});
+    deselect(); clearArrows();
+    return true;
+  }
+  // if it wasn't legal by the time the turn came, it's silently discarded (standard premove behaviour)
+  return false;
+}
+
+// ---- Play vs Maia at your rating (opponent plays like a human of the chosen band) ----
+function playNet(){ return maiaNet(document.getElementById('rating').value); }
+// Choose Maia's move for a *game* (not the raw policy sample). We restrict to the
+// level's realistic candidate moves and sharpen toward the stronger ones, instead
+// of sampling Maia's whole distribution — that long tail is what made it play
+// random blunders. Result: it plays like a solid player of the band, with variety
+// among sensible moves rather than the occasional self-destruct.
+function chooseMaiaMove(cands){
+  if(!cands.length) return null;
+  const top = cands[0].p || 0;
+  let pool = cands.filter(m => m.p >= Math.max(0.08, top*0.25));   // drop the weak long tail
+  if(!pool.length) pool = [cands[0]];
+  const T = 0.5;                                                    // <1 sharpens toward the typical/stronger move
+  const w = pool.map(m => Math.pow(Math.max(m.p,1e-6), 1/T));
+  const sum = w.reduce((a,b)=>a+b,0);
+  let r = Math.random()*sum, acc = 0;
+  for(let i=0;i<pool.length;i++){ acc += w[i]; if(r <= acc) return pool[i]; }
+  return pool[0];
+}
+async function updateEvalPlay(){
+  try{ const eng = await analyzeEngine(game.fen()); if(eng) setEvalFromEngine(eng, game.turn()); }catch(e){}
+}
+function togglePlay(){ play.on ? stopPlay() : startPlay(); }
+function startPlay(){
+  exitPuzzles();
+  play.on = true;
+  play.human = document.getElementById('playcolor').value;
+  exitReview(); clearPremove(); clearArrows(); redo.length=0; game.reset();
+  orient = play.human;
+  document.getElementById('playbtn').textContent = '■ Stop game';
+  resultsEl.innerHTML = '<div class="engine">Playing vs <b>Maia-'+playNet()+'</b> — it plays like a human of your band, '
+    + 'but clear blunders are filtered out so it stays instructive (it won’t hang pieces for free). '
+    + 'Coaching is hidden so it’s a real game. Premove during Maia’s move by dragging your piece; right-click cancels it.</div>';
+  setEval(0,'0.0'); render(); updateEvalBar();
+  if(game.turn()===play.human) statusEl.textContent = 'Your move ('+(play.human==='w'?'White':'Black')+').';
+  else maiaReply();                          // playing Black: Maia (White) moves first
+}
+function stopPlay(){
+  play.on = false; clearPremove();
+  document.getElementById('playbtn').textContent = '▶ Start game';
+  render(); analyze();                       // restore coaching for the current position
+}
+async function maiaReply(){
+  if(!play.on) return;
+  if(game.game_over()){ showGameResult(); return; }
+  if(game.turn()===play.human) return;       // it's your move; wait
+  const net = playNet();
+  const fen = game.fen();
+  statusEl.textContent = 'Maia-'+net+' is thinking…';
+  const minThink = new Promise(r=>setTimeout(r, 450));   // a beat, so it doesn't snap-move
+  const maia = await maiaFetch(fen, net).catch(()=>null);
+  if(!play.on || game.fen()!==fen) return;   // toggled off / position changed
+  let cands = (maia && maia.moves && maia.moves.length) ? maia.moves.slice() : null;
+  // Soundness guard: have Stockfish rate Maia's top candidates and drop the ones
+  // that lose material outright, so the opponent won't hand you pieces for free.
+  if(cands){
+    const evalMoves = cands.slice(0,6).map(m=>m.uci);
+    const eng = await analyzeEngine(fen, evalMoves).catch(()=>null);
+    if(!play.on || game.fen()!==fen) return;
+    if(eng && eng.lines && eng.lines.length){
+      const cp = {}; eng.lines.forEach(l=>{ if(l.uci!=null) cp[l.uci] = scoreCp(l); });
+      const vals = Object.values(cp);
+      if(vals.length){
+        const best = Math.max(...vals), BLUNDER = 150;   // >1.5 pawns worse than best = a blunder
+        const sound = cands.filter(m => cp[m.uci]==null || (best - cp[m.uci]) <= BLUNDER);
+        if(sound.length) cands = sound;
+      }
+    }
+  }
+  await minThink;
+  if(!play.on || game.fen()!==fen) return;
+  let mv = null;
+  if(cands && cands.length){
+    const s = chooseMaiaMove(cands);
+    // lc0/Maia encodes castling as king-onto-rook (e8h8); normalise so chess.js accepts it.
+    if(s){ const u = normUci(fen, s.uci); mv = {from:u.slice(0,2), to:u.slice(2,4), promotion:u[4]||'q'}; }
+  }
+  // ALWAYS make a legal move: if Maia's pick doesn't apply for any reason, play a
+  // random legal move rather than leaving the game stuck on Maia's turn.
+  let moved = mv ? !!game.move(mv) : false;
+  if(!moved){
+    const lm = game.moves({verbose:true});
+    if(lm.length){ const m = lm[Math.floor(Math.random()*lm.length)]; game.move({from:m.from,to:m.to,promotion:m.promotion||'q'}); moved = true; }
+  }
+  if(moved) soundForLast();
+  deselect(); render(); updateEvalPlay();
+  if(game.game_over()){ showGameResult(); return; }
+  // your turn now — fire a queued premove, then Maia answers again
+  if(tryPremove()){
+    render(); updateEvalPlay();
+    if(game.game_over()){ showGameResult(); return; }
+    return maiaReply();
+  }
+  statusEl.textContent = 'Your move ('+(play.human==='w'?'White':'Black')+').';
+}
+function showGameResult(){
+  let msg;
+  if(game.in_checkmate())            msg = (game.turn()===play.human) ? '♚ Checkmate — you lost.' : '🎉 Checkmate — you won!';
+  else if(game.in_stalemate())       msg = '½ Draw — stalemate.';
+  else if(game.in_threefold_repetition()) msg = '½ Draw — threefold repetition.';
+  else if(game.insufficient_material())   msg = '½ Draw — insufficient material.';
+  else if(game.in_draw())            msg = '½ Draw (50-move rule).';
+  else                               msg = 'Game over.';
+  statusEl.textContent = msg + '  Press ▶ Start game for a new one.';
+  updateEvalPlay();
+}
+
+// Map a screen point to a board square (respects orientation).
+function squareFromPoint(clientX, clientY){
+  const rect = boardEl.getBoundingClientRect();
+  const x = clientX-rect.left, y = clientY-rect.top;
+  if(x<0||y<0||x>=rect.width||y>=rect.height) return null;
+  const col = Math.floor(x/(rect.width/8)), row = Math.floor(y/(rect.height/8));
+  const f = orient==='w' ? col : 7-col;
+  const r = orient==='w' ? 8-row : row+1;
+  return FILES[f]+r;
+}
+
+// ---- Unified pointer interaction: drag-and-drop, click-to-move, AND premoves ----
+let drag = null;
+function startDrag(el, sq, piece, e, isPremove, wasSelected){
+  const rect = boardEl.getBoundingClientRect(), size = rect.width/8;
+  const ghost = document.createElement('img');
+  ghost.src = PIECES[piece.color+piece.type.toUpperCase()];
+  ghost.className = 'pc drag-ghost';
+  ghost.style.width = ghost.style.height = size+'px';
+  document.body.appendChild(ghost);
+  const srcImg = el.querySelector('img.pc'); if(srcImg) srcImg.style.visibility='hidden';
+  drag = { from:sq, ghost, size, srcImg, moved:false, over:null, sx:e.clientX, sy:e.clientY,
+           premove:isPremove, wasSelected:!!wasSelected };
+  positionGhost(e.clientX, e.clientY);
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+  e.preventDefault();
+}
+function onPointerDown(e){
+  if(e.button!==undefined && e.button>0) return;      // left button / touch only
+  const el = e.target.closest('.sq'); if(!el) return;
+  if(editMode){ editPlace(el.dataset.sq); return; }    // editor: clicking places/erases pieces
+  const sq = el.dataset.sq, piece = game.get(sq);
+  const turn = game.turn();
+
+  // Complete a click-to-premove: a premove source is chosen, this click sets the target.
+  if(pmSel){
+    if(sq!==pmSel && game.get(pmSel)) setPremove(pmSel, sq);
+    else { pmSel=null; render(); }
+    return;
+  }
+
+  // Click-to-move: a piece is selected and this square is a legal destination.
+  if(sel && legalTargets.includes(sq)){ makeMove(sel, sq); return; }
+
+  // In Play mode you can only touch your own pieces (capturing Maia's is handled above as a destination).
+  if(play.on && piece && piece.color!==play.human){ deselect(); pmSel=null; render(); return; }
+
+  if(piece && piece.color===turn){
+    // Your own piece (side to move): select + start a normal drag.
+    const wasSelected = (sel===sq);          // capture BEFORE selecting
+    selectSquare(sq); render();
+    startDrag(el, sq, piece, e, false, wasSelected);
+    return;
+  }
+  if(play.on && piece && piece.color!==turn){
+    // PREMOVE (only while playing Maia): grab your piece during Maia's move to queue your reply.
+    deselect(); pmSel = sq; render();
+    startDrag(el, sq, piece, e, true, false);
+    return;
+  }
+
+  // Empty square: clear any selection / half-made premove.
+  if(sel || pmSel){ deselect(); pmSel=null; render(); }
+}
+function positionGhost(x,y){ if(drag){ drag.ghost.style.left=(x-drag.size/2)+'px'; drag.ghost.style.top=(y-drag.size/2)+'px'; } }
+function onPointerMove(e){
+  if(!drag) return;
+  if(!drag.moved && Math.hypot(e.clientX-drag.sx, e.clientY-drag.sy) > 4) drag.moved = true;
+  positionGhost(e.clientX, e.clientY);
+  const t = squareFromPoint(e.clientX, e.clientY);
+  if(t!==drag.over){
+    if(drag.over){ const p=boardEl.querySelector('.sq[data-sq="'+drag.over+'"]'); if(p) p.classList.remove('over'); }
+    const canDrop = drag.premove ? (!!t && t!==drag.from) : (t && legalTargets.includes(t));
+    if(canDrop){ const p=boardEl.querySelector('.sq[data-sq="'+t+'"]'); if(p) p.classList.add('over'); }
+    drag.over = t;
+  }
+  e.preventDefault();
+}
+function onPointerUp(e){
+  if(!drag) return;
+  window.removeEventListener('pointermove', onPointerMove);
+  window.removeEventListener('pointerup', onPointerUp);
+  const target = squareFromPoint(e.clientX, e.clientY);
+  if(drag.srcImg) drag.srcImg.style.visibility='';
+  drag.ghost.remove();
+  const { from, moved, wasSelected, premove:isPm } = drag;
+  drag = null;
+  if(isPm){
+    if(moved){
+      if(target && target!==from) setPremove(from, target);  // dragged premove
+      else { pmSel=null; render(); }                          // dropped on itself → cancel
+    }
+    // if not moved: it was a click on the piece — keep pmSel so the next click sets the target
+    return;
+  }
+  if(moved){
+    if(target && legalTargets.includes(target)) makeMove(from, target);
+    else render();                       // invalid drop: snap back, keep selection
+  } else if(wasSelected){
+    deselect(); render();                // tapping an already-selected piece deselects it
+  }
+}
+
+function clearResults(){ resultsEl.innerHTML=''; }
+
+boardEl.addEventListener('pointerdown', onPointerDown);   // drag + click, delegated (survives re-render)
+// Right-click anywhere on the board cancels a queued premove (Lichess-style).
+boardEl.addEventListener('contextmenu', e=>{
+  e.preventDefault();
+  if(editMode){ const el=e.target.closest('.sq'); if(el){ game.remove(el.dataset.sq); render(); } return; }
+  if(premove||pmSel){ clearPremove(); render(); }
+});
+
+document.getElementById('playbtn').onclick = togglePlay;
+document.getElementById('flip').onclick=()=>{orient=orient==='w'?'b':'w';render();updateEvalBar();}; // arrows + bar re-anchor
+document.getElementById('undo').onclick=()=>{
+  if(puzMode){ if(puz && puz.done) puzGoto(puz.reviewPly-1); return; }  // step back through a solved puzzle
+  if(play.on){
+    // takeback: undo Maia's reply AND your move so it's your turn again
+    exitReview(); clearPremove(); sel=null; legalTargets=[]; clearArrows(); clearResults();
+    game.undo(); if(game.turn()!==play.human) game.undo();
+    render(); updateEvalPlay();
+    statusEl.textContent='Takeback — your move ('+(play.human==='w'?'White':'Black')+').';
+  } else {
+    clearResults(); goBack();               // same as ← : step back, keeps a "forward" available
+  }
+};
+document.getElementById('reset').onclick=()=>{exitPuzzles();exitReview();clearPremove();if(play.on)stopPlay();redo.length=0;game.reset();sel=null;legalTargets=[];clearArrows();clearResults();render();analyze();};
+document.getElementById('loadfen').onclick=()=>{
+  const f=document.getElementById('fen').value.trim();
+  if(!f) return;
+  if(game.load(f)){exitPuzzles();exitReview();clearPremove();redo.length=0;sel=null;legalTargets=[];clearArrows();clearResults();render();analyze();}
+  else statusEl.textContent='⚠ That FEN is not valid.';
+};
+
+/* ========== Puzzle mode: solve tactics near your rating band ========== */
+let puzMode=false;
+let puz=null;   // {data, solveIdx, solverColor, done, failed, fails, hintLevel}
+let puzTheme=null;  // when set (via a study-plan drill), only fetch this theme
+
+function ratingCenter(){
+  const b=document.getElementById('rating').value.split(',');
+  return Math.round((+b[0] + +b[1])/2);
+}
+function puzDifficulty(){ return document.getElementById('difficulty').value; }
+
+async function fetchPuzzle(){
+  const q = puzTheme ? '&theme='+encodeURIComponent(puzTheme) : '';
+  const r=await fetch(`/puzzle?rating=${ratingCenter()}&diff=${puzDifficulty()}${q}`,{cache:'no-store'});
+  if(!r.ok) throw new Error('puzzle '+r.status);
+  const j=await r.json(); if(j.error) throw new Error(j.error);
+  return j;
+}
+
+// Enter puzzles (optionally drilling a theme). Study-plan "Drill now" buttons
+// call this; the Puzzles nav tab enters via setMode which calls loadNextPuzzle.
+function startPuzzles(theme){
+  puzTheme = theme || null;
+  if(mode==='puzzles') loadNextPuzzle();     // already here → just fetch a (themed) puzzle
+  else setMode('puzzles');                    // switch tab; its entry loads the first puzzle
+}
+function exitPuzzles(){   // clear state only (no re-analyze) — used when another mode takes over
+  puzMode=false; puz=null; puzTheme=null; hidePuzReview();
+}
+function stopPuzzles(){ exitPuzzles(); clearArrows(); clearResults(); render(); analyze(); }
+
+async function loadNextPuzzle(){
+  clearArrows(); deselect(); sel=null; legalTargets=[];
+  statusEl.textContent='Loading a puzzle…'; resultsEl.innerHTML='';
+  let data;
+  try{ data=await fetchPuzzle(); }
+  catch(e){ statusEl.innerHTML='⚠ Could not load a puzzle ('+escapeHtml(e.message)+'). Run <code>python build_puzzles.py</code> once to create the puzzle bank.'; return; }
+  setupPuzzle(data);
+}
+
+function applyUci(uci){
+  const from=uci.slice(0,2), to=uci.slice(2,4), promo=uci.length>4?uci[4]:undefined;
+  game.move({from, to, promotion:promo});
+  soundForLast();
+}
+
+function setupPuzzle(data){
+  puz={data, solveIdx:1, done:false, failed:false, fails:0, hintLevel:-1};
+  game.load(data.fen);
+  const setupColor=game.turn();                 // this side plays the auto "setup" move
+  puz.solverColor = setupColor==='w'?'b':'w';
+  orient=puz.solverColor;
+  deselect(); render(); renderPuzzleCard(); hidePuzReview(); updateEvalBarVisibility();  // hide eval bar while unsolved
+  statusEl.textContent='Get ready…';
+  setTimeout(()=>{                              // play opponent's setup move into the puzzle position
+    if(!puzMode||!puz) return;
+    applyUci(data.moves[0]);
+    lastArrows=[{from:data.moves[0].slice(0,2), to:data.moves[0].slice(2,4), color:'#8a8a8a', width:0.12, dash:true}];
+    render();
+    statusEl.innerHTML='<b>'+(puz.solverColor==='w'?'White':'Black')+' to move.</b> Find the best move.';
+  }, 550);
+}
+
+// Called from makeMove() when a move is played while solving.
+function checkPuzzleMove(){
+  const last=game.history({verbose:true}).slice(-1)[0];
+  const uci=last.from+last.to+(last.promotion||'');
+  const expected=puz.data.moves[puz.solveIdx];
+  const correct = uci===expected || game.in_checkmate();   // any checkmate solves the puzzle
+  if(!correct){
+    puz.fails++;
+    game.undo(); deselect(); render();
+    statusEl.innerHTML='✗ Not the best move — <b>try again.</b>'+(puz.fails>=2?' <span style="color:var(--muted)">(the 💡 Hint can help)</span>':'');
+    return;
+  }
+  puz.hintLevel=-1; clearArrows(); puz.solveIdx++;
+  const reply=puz.data.moves[puz.solveIdx];
+  if(!reply){ puzzleSolved(); return; }
+  statusEl.innerHTML='✓ <b>Correct.</b> Keep going…';
+  setTimeout(()=>{                              // opponent's forced reply, then it's the solver again
+    if(!puzMode||!puz) return;
+    applyUci(reply);
+    lastArrows=[{from:reply.slice(0,2), to:reply.slice(2,4), color:'#8a8a8a', width:0.12, dash:true}];
+    puz.solveIdx++; deselect(); render();
+    statusEl.innerHTML='<b>Your move.</b> Find the best continuation.';
+  }, 430);
+}
+
+function puzzleSolved(){
+  puz.done=true; clearArrows();
+  puz.reviewPly = puz.data.moves.length;         // board sits at the final position
+  const solvedUnaided = !puz.failed, clean = solvedUnaided && puz.fails===0;
+  recordPuzzleResult(puz.data, clean, solvedUnaided);   // feeds rating, streak, per-theme weakness
+  statusEl.innerHTML = clean ? '🎉 <b>Solved!</b> Clean — no wrong moves.'
+                     : (puz.failed ? '<b>Solution shown.</b> On to the next.' : '✓ <b>Solved.</b>');
+  renderPuzzleCard();                            // reveals themes + Lichess link now that it's done
+  renderPuzReview();                             // solution line + step-through nav (persistent block)
+  // Eval bar returns and shows the evaluation of the final board position.
+  updateEvalBarVisibility();
+  analyzeEngine(game.fen()).then(e=>{ if(e && puz && puz.done && puz.reviewPly===puz.data.moves.length) setEvalFromEngine(e, game.turn()); }).catch(()=>{});
+}
+
+// The solution as SAN {san, ply, solver, color}, from the puzzle's start FEN.
+function puzzleSolutionLine(){
+  const d=puz.data, g=new Chess(); if(!g.load(d.fen)) return [];
+  const out=[];
+  d.moves.forEach((u,i)=>{
+    const m=g.move({from:u.slice(0,2),to:u.slice(2,4),promotion:u.length>4?u[4]:undefined});
+    if(m) out.push({san:m.san, ply:i+1, solver:i%2===1, color:m.color});
+  });
+  return out;
+}
+
+// Step the board to a given ply of the solved puzzle, then coach that position.
+function puzGoto(ply){
+  if(!puz || !puz.done) return;
+  const moves=puz.data.moves;
+  puz.reviewPly = Math.max(0, Math.min(ply, moves.length));
+  game.load(puz.data.fen);
+  for(let i=0;i<puz.reviewPly;i++){ const u=moves[i]; game.move({from:u.slice(0,2),to:u.slice(2,4),promotion:u.length>4?u[4]:undefined}); }
+  deselect(); clearArrows(); render();
+  renderPuzReview();
+  analyze();                                     // shows the best move for THIS position (continuous best moves)
+}
+
+// Persistent block below the controls: step-nav + the full best-move line.
+function renderPuzReview(){
+  const el=document.getElementById('puzreview');
+  if(!puz || !puz.done){ el.style.display='none'; el.innerHTML=''; return; }
+  const line=puzzleSolutionLine(), cur=puz.reviewPly;
+  let startFull=+(puz.data.fen.split(' ')[5]||1);
+  let lineHtml='', full=startFull;
+  line.forEach((x,i)=>{
+    if(x.color==='w') lineHtml+=`<span class="pnum">${full}.</span>`;
+    else if(i===0)    lineHtml+=`<span class="pnum">${full}…</span>`;
+    lineHtml+=`<span class="pmove${x.solver?' solver':''}${x.ply===cur?' cur':''}" data-ply="${x.ply}">${escapeHtml(x.san)}</span> `;
+    if(x.color==='b') full++;
+  });
+  el.innerHTML =
+    `<div class="pnav">
+       <button id="pfirst" title="Start position">⏮</button>
+       <button id="pprev" title="Back one move">◀</button>
+       <span id="pmovelabel" style="font-size:12px;color:var(--muted);min-width:64px;text-align:center">${cur}/${line.length}</span>
+       <button id="pnext" title="Forward one move">▶</button>
+       <button id="plast" title="Final position">⏭</button>
+       <span style="font-size:12px;color:var(--muted);margin-left:6px">Step through — the coach shows the best move at each point.</span>
+     </div>
+     <div class="pline"><b>Best line:</b> ${lineHtml}</div>`;
+  el.style.display='';
+  el.querySelector('#pfirst').onclick=()=>puzGoto(0);
+  el.querySelector('#pprev').onclick =()=>puzGoto(puz.reviewPly-1);
+  el.querySelector('#pnext').onclick =()=>puzGoto(puz.reviewPly+1);
+  el.querySelector('#plast').onclick =()=>puzGoto(line.length);
+  el.querySelectorAll('.pmove').forEach(m=> m.onclick=()=>puzGoto(+m.dataset.ply));
+}
+function hidePuzReview(){ const el=document.getElementById('puzreview'); if(el){ el.style.display='none'; el.innerHTML=''; } }
+
+// Plain-language reason the puzzle's key move works (from the solution line).
+function puzzleKeyExplanation(){
+  try{
+    const d=puz.data, uci=u=>({from:u.slice(0,2),to:u.slice(2,4),promotion:u.length>4?u[4]:undefined});
+    const g=new Chess(); if(!g.load(d.fen)) return '';
+    g.move(uci(d.moves[0]));                      // opponent's setup move
+    const fenAfterSetup=g.fen();
+    const gg=new Chess(); gg.load(d.fen);         // play whole line to detect forced mate
+    for(const u of d.moves) gg.move(uci(u));
+    const mate = gg.in_checkmate() ? Math.ceil((d.moves.length-1)/2) : null;
+    return explainMove(fenAfterSetup, d.moves[1], {pv:d.moves.slice(1).join(' '), mate});
+  }catch(e){ return ''; }
+}
+
+function showHint(){
+  if(!puz||puz.done) return;
+  const expected=puz.data.moves[puz.solveIdx]; if(!expected) return;
+  const from=expected.slice(0,2), to=expected.slice(2,4);
+  puz.hintLevel = puz.hintLevel<0 ? 0 : Math.min(1, puz.hintLevel+1);
+  if(puz.hintLevel===0){ selectSquare(from); render(); statusEl.innerHTML='💡 Move the piece on <b>'+from+'</b>.'; }
+  else { deselect(); lastArrows=[{from, to, color:'#e0a500', width:0.16, dash:false}]; render(); statusEl.innerHTML='💡 Play <b>'+from+' → '+to+'</b>.'; }
+}
+
+function showSolution(){
+  if(!puz||puz.done) return;
+  puz.failed=true;
+  statusEl.innerHTML='👁 Playing the solution…';
+  let i=puz.solveIdx;
+  (function step(){
+    if(!puzMode||!puz) return;
+    if(i>=puz.data.moves.length){ puzzleSolved(); return; }
+    const mv=puz.data.moves[i], solver=((i-1)%2===0);
+    applyUci(mv);
+    lastArrows=[{from:mv.slice(0,2), to:mv.slice(2,4), color: solver?'#2e9b57':'#8a8a8a', width:0.14, dash:!solver}];
+    deselect(); render(); i++;
+    setTimeout(step, 480);
+  })();
+}
+
+function renderPuzzleCard(){
+  if(!puz) return;
+  const d=puz.data;
+  let tail;
+  if(puz.done){
+    const why=puzzleKeyExplanation();
+    const whyHtml = why ? '<div style="margin-top:6px"><b>Why it works:</b> '+escapeHtml(why)+'</div>' : '';
+    const themeHtml = (d.themes.length ? '<div style="margin-top:6px;font-size:12px;color:var(--muted)">Themes: '+d.themes.map(escapeHtml).join(', ')+'</div>' : '')
+      + '<div style="margin-top:2px"><a href="https://lichess.org/training/'+encodeURIComponent(d.id)+'" target="_blank" rel="noopener" style="font-size:12px">View on Lichess ↗</a></div>';
+    tail = whyHtml + themeHtml;
+  } else {
+    tail = '<div style="margin-top:6px;font-size:12px;color:var(--muted)">Themes hidden until solved — no spoilers.</div>';
+  }
+  const drill = puzTheme ? ' · drilling <b>'+escapeHtml(prettyTheme(puzTheme))+'</b>' : '';
+  resultsEl.innerHTML='<div class="engine"><b>Puzzle</b> · rating '+d.rating+' · '+escapeHtml(puzDifficulty())+
+    ' · '+(puz.solverColor==='w'?'White':'Black')+' to move'+drill+tail+'</div>';
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+document.getElementById('hintbtn').onclick=showHint;
+document.getElementById('solutionbtn').onclick=showSolution;
+document.getElementById('nextpuzzlebtn').onclick=()=>{ if(puzMode) loadNextPuzzle(); };
+
+/* ========== Modes (nav bar) — one right-hand control block per mode ========== */
+let mode='coach';
+const MODE_BLOCKS=['coach','openings','puzzles','play','review'];
+function setMode(m){
+  if(!MODE_BLOCKS.includes(m)) return;
+  // Leave the current mode cleanly.
+  if(mode==='puzzles' && m!=='puzzles') exitPuzzles();
+  if(mode==='play' && m!=='play' && play.on) stopPlay();
+  if(mode==='review' && m!=='review') exitReview();
+  if(mode==='openings' && m!=='openings') exitOpenings();
+  if(editMode) cancelEdit();
+  mode=m;
+  // Nav highlight + show the matching control block (and its rating-row field).
+  document.querySelectorAll('.topnav .modes button').forEach(b=>b.classList.toggle('active', b.dataset.mode===m));
+  MODE_BLOCKS.forEach(x=>{ const el=document.getElementById('ctrl-'+x); if(el) el.style.display = x===m?'':'none'; });
+  document.getElementById('ctrl-coach-speed').style.display = m==='coach'?'':'none';
+  document.getElementById('ctrl-puzzles-diff').style.display = m==='puzzles'?'':'none';
+  document.getElementById('ctrl-play-color').style.display = m==='play'?'':'none';
+  document.getElementById('openingsbox').style.display = m==='openings'?'':'none';
+  // Enter the new mode.
+  if(m==='coach'){ clearArrows(); render(); analyze(); }
+  else if(m==='openings'){ if(play.on) stopPlay(); exitReview(); exitPuzzles(); clearPremove(); redo.length=0; clearArrows(); clearResults(); startOpenings(); }
+  else if(m==='puzzles'){ if(play.on) stopPlay(); exitReview(); clearPremove(); redo.length=0; clearArrows(); clearResults(); puzMode=true; loadNextPuzzle(); }
+  else if(m==='play'){ clearArrows(); clearResults(); render(); statusEl.textContent='Choose your colour and press ▶ Start game.'; }
+  else if(m==='review'){ clearArrows(); statusEl.textContent='Paste a game’s PGN and press Load game.'; }
+  updateEvalBarVisibility();
+}
+document.querySelectorAll('.topnav .modes button').forEach(b=> b.onclick=()=>setMode(b.dataset.mode));
+
+// Eval bar is hidden while a puzzle is unsolved (no spoilers); it returns once solved.
+function updateEvalBarVisibility(){
+  const hide = (mode==='puzzles') && (!puz || !puz.done);
+  const bar=document.getElementById('evalbar'); if(bar) bar.style.visibility = hide?'hidden':'visible';
+}
+
+/* ========== Openings library — browse and step through annotated lines ==========
+ * Openings mode is a *guided coach*: at every position it runs the same Maia +
+ * Stockfish analysis as Coach mode (so the "best move for your rating" panel and
+ * the opponent-reply arrow update live), while overlaying the book line on top.
+ * The "book pointer" is DERIVED from the moves actually on the board, so you can
+ * step through theory, deviate to explore, or play on past the end of a line —
+ * the coaching follows you the whole way. */
+let op = { on:false, opening:null, lineIdx:0, ply:0, inBook:true, arrow:true };
+const opBox = document.getElementById('openingsbox');
+const opLine = ()=> op.opening.lines[op.lineIdx];
+const stripDec = s => String(s).replace(/[+#!?]/g,'');   // ignore check/annotation marks when matching SAN
+
+function exitOpenings(){ op.on=false; op.opening=null; opBox.innerHTML=''; }
+
+function startOpenings(){
+  op.on=true; op.opening=null;
+  document.getElementById('ctrl-openings').style.display='none';  // list view needs no move controls
+  game.reset(); orient='w'; sel=null; legalTargets=[]; clearArrows(); render();
+  renderOpeningsList();
+  statusEl.textContent='Pick an opening to study its ideas and main lines.';
+}
+
+function renderOpeningsList(filter){
+  const f=(filter||'').trim().toLowerCase();
+  const list = (typeof OPENINGS!=='undefined') ? OPENINGS : [];
+  const match = o => !f || (o.name+' '+o.group+' '+o.eco+' '+o.summary).toLowerCase().includes(f);
+  const groups=[];
+  for(const o of list){ if(!match(o)) continue;
+    let g=groups.find(x=>x.name===o.group); if(!g){ g={name:o.group, items:[]}; groups.push(g); }
+    g.items.push(o);
+  }
+  let html='<div class="op-intro">Study real opening theory the practical way: pick an opening, read its plans, '+
+    'then walk each line move by move on the board. The next move shows as an arrow — or play it yourself to test your memory.</div>'+
+    '<input type="text" class="op-search" id="op-search" placeholder="Search openings (e.g. Sicilian, gambit, d4)…">';
+  if(!groups.length) html+='<div class="pv-empty">No openings match “'+escapeHtml(filter||'')+'”.</div>';
+  for(const g of groups){
+    html+='<div class="op-group">'+escapeHtml(g.name)+'</div>';
+    for(const o of g.items){
+      html+='<div class="op-card" data-open="'+o.id+'">'+
+        '<div><span class="op-name">'+escapeHtml(o.name)+'</span><span class="op-eco">'+escapeHtml(o.eco)+'</span></div>'+
+        '<div class="op-sum">'+escapeHtml(o.summary)+'</div></div>';
+    }
+  }
+  opBox.innerHTML=html;
+  const search=document.getElementById('op-search');
+  if(search){ search.value=filter||''; search.oninput=()=>renderOpeningsList(search.value); }
+  opBox.querySelectorAll('[data-open]').forEach(c=> c.onclick=()=>openOpening(c.dataset.open));
+}
+
+function openOpening(id){
+  const o=(OPENINGS||[]).find(x=>x.id===id); if(!o) return;
+  op.opening=o; op.lineIdx=0; op.ply=0;
+  orient = o.orient==='b' ? 'b' : 'w';
+  document.getElementById('ctrl-openings').style.display='';
+  renderStudy();
+  opGoto(0);
+}
+
+function opBackToList(){
+  op.opening=null;
+  document.getElementById('ctrl-openings').style.display='none';
+  clearArrows(); game.reset(); orient='w'; render();
+  renderOpeningsList();
+  statusEl.textContent='Pick an opening to study its ideas and main lines.';
+}
+
+// Build the study panel (ideas + line selector + notes area). Called on open / line change.
+function renderStudy(){
+  const o=op.opening; if(!o) return;
+  const sideTxt = o.orient==='b' ? 'Study as Black' : 'Study as White';
+  let html='<div class="op-back" id="op-backlink">⟵ All openings</div>'+
+    '<div><span class="op-title">'+escapeHtml(o.name)+'</span><span class="op-side">'+sideTxt+'</span></div>'+
+    '<div class="op-sum" style="margin-top:4px">'+escapeHtml(o.summary)+'</div>'+
+    '<ul class="op-ideas">'+o.ideas.map(i=>'<li>'+escapeHtml(i)+'</li>').join('')+'</ul>';
+  html+='<div class="op-lines">'+o.lines.map((l,i)=>
+    '<button class="op-linebtn'+(i===op.lineIdx?' sel':'')+'" data-line="'+i+'">'+escapeHtml(l.name)+'</button>').join('')+'</div>';
+  html+='<div class="op-linenote" id="op-linenote"></div>'+
+    '<div class="op-progress" id="op-prog"></div>'+
+    '<div class="op-note" id="op-note"></div>'+
+    '<div class="op-moves" id="op-moves"></div>';
+  opBox.innerHTML=html;
+  document.getElementById('op-backlink').onclick=opBackToList;
+  opBox.querySelectorAll('[data-line]').forEach(b=> b.onclick=()=>opSelectLine(+b.dataset.line));
+}
+
+function opSelectLine(i){
+  if(!op.opening) return;
+  op.lineIdx=i; op.ply=0;
+  opBox.querySelectorAll('[data-line]').forEach(b=> b.classList.toggle('sel', +b.dataset.line===i));
+  opGoto(0);
+}
+
+// Jump to exactly `n` book half-moves of the current line (rebuild from scratch).
+function opGoto(n){
+  const moves=opLine().moves;
+  n=Math.max(0, Math.min(n, moves.length));
+  game.reset();
+  for(let i=0;i<n;i++) game.move(moves[i].san, {sloppy:true});
+  sel=null; legalTargets=[]; clearPremove();
+  if(n>0) soundForLast();
+  opRefresh();
+}
+
+// Recompute everything from the position on the board: how far it follows the
+// book line, the notes, the move list, the buttons — then run the live coach.
+function opRefresh(){
+  if(!op.opening) return;
+  const moves=opLine().moves;
+  const hist=game.history();                       // SAN of moves actually played
+  let m=0; while(m<hist.length && m<moves.length && stripDec(hist[m])===stripDec(moves[m].san)) m++;
+  op.ply=m;
+  op.inBook = (m===hist.length);                   // every played move has followed the book
+  sel=null; legalTargets=[]; clearArrows();
+  render();                                        // show the board immediately
+  opRenderDynamic(hist.length);
+  analyze();                                       // Maia + Stockfish coach (async); adds the book arrow on completion
+}
+
+// Fill the note / progress / move-list / buttons for the current state.
+function opRenderDynamic(histLen){
+  const line=opLine(), moves=line.moves;
+  const atEnd = op.inBook && op.ply>=moves.length;
+  const ln=document.getElementById('op-linenote'); if(ln) ln.textContent=line.note||'';
+  const prog=document.getElementById('op-prog');
+  if(prog){
+    prog.textContent = !op.inBook ? 'Off the book line · '+histLen+' moves played'
+                     : op.ply===0 ? 'Starting position · move 0 / '+moves.length
+                                  : 'Book move '+op.ply+' / '+moves.length;
+  }
+  const noteEl=document.getElementById('op-note');
+  if(noteEl){
+    let h='';
+    if(!op.inBook){
+      h='<span class="op-mvname" style="color:var(--warn)">Off book</span>'+
+        'You’ve left the theory — the coach below is analysing your position. '+
+        'Press <b>⏮ Restart</b> or a line button to return to the book.';
+    } else if(op.ply===0){
+      h='<span class="op-mvname">Line: '+escapeHtml(line.name)+'</span>'+
+        'Read the ideas above, then press <b>▶ Next</b> (or play the moves yourself) to walk the line.';
+    } else {
+      const mv=moves[op.ply-1];
+      h='<span class="op-mvname">'+escapeHtml(opMoveLabel(op.ply-1))+'</span>'+
+        (mv.note ? escapeHtml(mv.note) : 'A natural developing move.');
+    }
+    if(atEnd){
+      h+='<br><span style="color:var(--good)">✓ End of the book line — keep playing on the board to explore; '+
+         'the coach shows the best moves for your rating from here.</span>';
+    }
+    // colour key for the arrows the coach draws
+    if(op.inBook && !atEnd){
+      h+='<div style="font-size:11.5px;color:var(--muted);margin-top:8px">'+
+         '<span style="color:#2dd4bf">▬ theory move</span> &nbsp;·&nbsp; '+
+         '<span style="color:#4ade80">▬ best for your level</span> &nbsp;·&nbsp; '+
+         '<span style="color:#c084fc">▬ likely reply</span></div>';
+    }
+    noteEl.innerHTML=h;
+  }
+  renderOpMoves();
+  // Button states
+  const nextBtn=document.getElementById('op-next'), prevBtn=document.getElementById('op-prev');
+  if(nextBtn) nextBtn.disabled = !(op.inBook && op.ply<moves.length);
+  if(prevBtn) prevBtn.disabled = (histLen===0);
+}
+
+// "1.e4" / "1…e5" style label for book move at index i (0-based half-move).
+function opMoveLabel(i){
+  const moves=opLine().moves, num=Math.floor(i/2)+1;
+  return (i%2===0 ? num+'.' : num+'…') + moves[i].san;
+}
+
+function renderOpMoves(){
+  const box=document.getElementById('op-moves'); if(!box) return;
+  const moves=opLine().moves;
+  let html='';
+  for(let i=0;i<moves.length;i++){
+    if(i%2===0) html+='<span class="pnum">'+(i/2+1)+'.</span>';
+    const cur = (op.inBook && i===op.ply-1) ? ' cur' : '';
+    html+='<span class="pmove'+cur+'" data-ply="'+(i+1)+'">'+escapeHtml(moves[i].san)+'</span> ';
+  }
+  box.innerHTML=html;
+  box.querySelectorAll('[data-ply]').forEach(s=> s.onclick=()=>opGoto(+s.dataset.ply));
+}
+
+// Called from makeMove when the user drags/clicks a piece in Openings mode.
+// Any legal move is allowed: if it follows the book we stay "in book", otherwise
+// we go "off book" and the coach keeps analysing the new position.
+function opTryMove(from,to){
+  const legal=game.moves({verbose:true}).filter(m=>m.from===from&&m.to===to);
+  if(!legal.length){ deselect(); render(); return false; }
+  const promo = legal.some(m=>m.promotion) ? 'q' : undefined;
+  game.move({from,to,promotion:promo});
+  soundForLast();
+  opRefresh();
+  return true;
+}
+
+// After the coach has drawn its arrows, overlay the book (theory) move in teal.
+function opOverlayArrows(){
+  if(!op.on || !op.opening) return;
+  const moves=opLine().moves;
+  if(op.arrow && op.inBook && op.ply<moves.length){
+    const tmp=new Chess(game.fen());
+    const mv=tmp.move(moves[op.ply].san, {sloppy:true});
+    if(mv){ lastArrows.push({from:mv.from, to:mv.to, color:'#2dd4bf', width:0.16, dash:true}); drawArrows(); }
+  }
+}
+
+document.getElementById('op-list').onclick   = opBackToList;
+document.getElementById('op-restart').onclick= ()=>opGoto(0);
+document.getElementById('op-prev').onclick   = ()=>{ if(game.history().length){ game.undo(); opRefresh(); } };
+document.getElementById('op-next').onclick   = ()=>{ if(op.inBook && op.ply<opLine().moves.length) opGoto(op.ply+1); };
+document.getElementById('op-arrow').onclick  = (e)=>{ op.arrow=!op.arrow; e.target.textContent='👁 Book arrow: '+(op.arrow?'on':'off'); opRefresh(); };
+
+/* ========== Move sounds (synthesised, self-contained) ========== */
+let soundOn=true, _actx=null;
+function sound(kind){
+  if(!soundOn) return;
+  try{
+    _actx = _actx || new (window.AudioContext||window.webkitAudioContext)();
+    if(_actx.state==='suspended') _actx.resume();
+    const t=_actx.currentTime, o=_actx.createOscillator(), g=_actx.createGain(), f=_actx.createBiquadFilter();
+    f.type='lowpass'; f.frequency.value = kind==='capture'?1000:1700;
+    o.type='triangle';
+    const base = kind==='capture'?150 : kind==='check'?470 : 250;
+    o.frequency.setValueAtTime(base, t);
+    o.frequency.exponentialRampToValueAtTime(base*0.55, t+0.07);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(kind==='capture'?0.33:0.22, t+0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.16);
+    o.connect(f); f.connect(g); g.connect(_actx.destination);
+    o.start(t); o.stop(t+0.18);
+  }catch(e){}
+}
+function soundForLast(){
+  const h=game.history({verbose:true}), m=h[h.length-1]; if(!m) return;
+  sound((m.san.includes('#')||m.san.includes('+')) ? 'check'
+      : (m.flags.includes('c')||m.flags.includes('e')) ? 'capture' : 'move');
+}
+document.getElementById('soundbtn').onclick=function(){ soundOn=!soundOn; this.textContent=soundOn?'🔊':'🔇'; if(soundOn) sound('move'); };
+
+/* ========== Progress, weaknesses & study plan (stored locally) ========== */
+const PROGRESS_KEY='cc_progress_v1';
+function blankProgress(){ return { puzzleRating:null, solved:0, attempts:0, streak:0, bestStreak:0,
+  themes:{}, reviewMistakes:{opening:0,middlegame:0,endgame:0}, ratingHistory:[], updated:null }; }
+let progress = (()=>{ try{ return Object.assign(blankProgress(), JSON.parse(localStorage.getItem(PROGRESS_KEY))||{}); }catch(e){ return blankProgress(); } })();
+function saveProgress(){ progress.updated=Date.now(); try{ localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); }catch(e){} }
+
+const GENERIC_THEMES=new Set(['short','long','oneMove','veryLong','master','masterVsMaster','superGM','crushing','advantage','equality','defensiveMove','quietMove']);
+function prettyTheme(t){ return t.replace(/([A-Z])/g,' $1').replace(/(\d+)/,' $1').toLowerCase().trim(); }
+function gamePhase(){ const cnt=ALL_SQUARES.reduce((n,s)=>n+(game.get(s)?1:0),0); const mn=+(game.fen().split(' ')[5]||1); return mn<=12?'opening':cnt<=12?'endgame':'middlegame'; }
+
+function updatePuzzleRating(puzzleRating, success){
+  if(progress.puzzleRating==null) progress.puzzleRating = ratingCenter();
+  const expected = 1/(1+Math.pow(10,(puzzleRating-progress.puzzleRating)/400));
+  progress.puzzleRating = Math.round(progress.puzzleRating + 32*((success?1:0)-expected));
+  progress.ratingHistory.push({t:Date.now(), r:progress.puzzleRating});
+  if(progress.ratingHistory.length>250) progress.ratingHistory.shift();
+}
+function recordPuzzleResult(data, clean, solvedUnaided){
+  progress.attempts++;
+  if(solvedUnaided) progress.solved++;
+  progress.streak = (solvedUnaided && clean) ? progress.streak+1 : 0;
+  progress.bestStreak = Math.max(progress.bestStreak, progress.streak);
+  updatePuzzleRating(data.rating, solvedUnaided);
+  for(const th of data.themes){ const t=progress.themes[th]||(progress.themes[th]={seen:0,solved:0}); t.seen++; if(solvedUnaided) t.solved++; }
+  saveProgress();
+}
+function weakThemes(minSeen){
+  return Object.entries(progress.themes)
+    .filter(([k,v])=> !GENERIC_THEMES.has(k) && v.seen>=(minSeen||3))
+    .map(([k,v])=>({theme:k, seen:v.seen, solved:v.solved, acc:v.solved/v.seen}))
+    .sort((a,b)=>a.acc-b.acc);
+}
+function studyPlan(){
+  const plan=[];
+  weakThemes(4).filter(w=>w.acc<0.6).slice(0,3).forEach(w=> plan.push({type:'drill', theme:w.theme,
+    txt:`You solve <b>${prettyTheme(w.theme)}</b> puzzles only ${Math.round(w.acc*100)}% of the time (${w.solved}/${w.seen}). Drill them to shore this up.`}));
+  const rm=progress.reviewMistakes, worst=Object.entries(rm).sort((a,b)=>b[1]-a[1])[0];
+  if(worst && worst[1]>=3) plan.push({type:'note', txt:`Most mistakes in the games you’ve reviewed land in the <b>${worst[0]}</b> (${worst[1]} logged). Study that phase.`});
+  if(progress.attempts<12) plan.push({type:'note', txt:`Solve more puzzles (you’ve done <b>${progress.attempts}</b>) — the coach needs a bit more data to pinpoint your weak spots.`});
+  if(!plan.length) plan.push({type:'note', txt:`Strong across the board — keep a daily puzzle habit and review every serious game to hold your edge.`});
+  return plan;
+}
+function renderProgress(){
+  const p=progress, acc=p.attempts?Math.round(p.solved/p.attempts*100):0;
+  const tiles=[['Puzzle rating',p.puzzleRating??'—'],['Solved',p.solved],['Accuracy',p.attempts?acc+'%':'—'],['Streak',p.streak],['Best streak',p.bestStreak]];
+  let html='<div class="pv-tiles">'+tiles.map(([l,v])=>`<div class="pv-tile"><b>${v}</b><span>${l}</span></div>`).join('')+'</div>';
+  const weak=weakThemes(3);
+  html+='<div class="pv-sec">Accuracy by theme</div>';
+  html+= weak.length ? weak.slice(0,8).map(w=>{ const pct=Math.round(w.acc*100), col=pct<45?'#f87171':pct<65?'#fbbf24':'#4ade80';
+    return `<div class="pv-bar"><span class="lbl">${prettyTheme(w.theme)}</span><span class="track"><span class="fill" style="width:${pct}%;background:${col}"></span></span><span class="pct">${pct}% · ${w.solved}/${w.seen}</span></div>`; }).join('')
+    : '<div class="pv-empty">Solve a handful of puzzles (any difficulty) and your per-theme accuracy shows up here — that’s what drives the study plan.</div>';
+  html+='<div class="pv-sec">Your study plan</div><ul class="pv-plan">';
+  studyPlan().forEach(s=> html+=`<li><span class="txt">${s.txt}</span>${s.type==='drill'?`<button class="primary" data-drill="${s.theme}">Drill now</button>`:''}</li>`);
+  html+='</ul>';
+  const body=document.getElementById('progressbody'); body.innerHTML=html;
+  body.querySelectorAll('[data-drill]').forEach(b=> b.onclick=()=>{ closeProgress(); startPuzzles(b.dataset.drill); });
+}
+function openProgress(){ renderProgress(); document.getElementById('progressview').style.display='flex'; }
+function closeProgress(){ document.getElementById('progressview').style.display='none'; }
+document.getElementById('progressbtn').onclick=openProgress;
+document.getElementById('progressclose').onclick=closeProgress;
+document.getElementById('progressview').onclick=e=>{ if(e.target.id==='progressview') closeProgress(); };
+let _resetArm=false;
+document.getElementById('progressreset').onclick=function(){
+  if(!_resetArm){ _resetArm=true; this.textContent='Click again to confirm'; return; }
+  progress=blankProgress(); saveProgress(); _resetArm=false; this.textContent='Reset all progress'; renderProgress();
+};
+
+/* ========== Concepts glossary (learn the idea → drill it) ========== */
+const CONCEPTS=[
+  {name:'Fork', theme:'fork', def:'One piece attacks two or more enemy pieces at once — the opponent can only save one, so you win the other.'},
+  {name:'Pin', theme:'pin', def:'A piece can’t move because doing so would expose a more valuable piece (or the king) behind it. Pile up on the pinned piece.'},
+  {name:'Skewer', theme:'skewer', def:'A pin in reverse: a valuable piece is attacked and forced to move, exposing a lesser piece behind it that you then take.'},
+  {name:'Discovered attack', theme:'discoveredAttack', def:'Moving one piece unveils an attack from a piece behind it — often winning material, or a discovered check.'},
+  {name:'Double check', theme:'doubleCheck', def:'Two pieces give check at once. The king MUST move — no block or capture can stop both. Devastating.'},
+  {name:'Back-rank mate', theme:'backRankMate', def:'The king is boxed in by its own pawns on the back rank; a rook or queen mates along it. Make a “luft” (escape square) to avoid it.'},
+  {name:'Hanging piece', theme:'hangingPiece', def:'An undefended piece you can just take for free. Every move, scan for hanging pieces — yours and the opponent’s.'},
+  {name:'Deflection', theme:'deflection', def:'Force a defender away from the square or piece it’s guarding, so that guarded thing falls.'},
+  {name:'Trapped piece', theme:'trappedPiece', def:'A piece with no safe squares — hunt it down with pawns and pieces and win it.'},
+  {name:'Initiative', def:'The power to keep making threats the opponent must answer, so you steer the game. Forcing moves — checks, captures, threats — keep it alive.'},
+  {name:'Development', def:'Getting knights and bishops off the back rank to active squares early. A lead in development means more force where it counts.'},
+  {name:'King safety', def:'Castle early, keep the pawns in front of your king intact. An exposed king is behind most attacks and mates.'},
+  {name:'Centre control', def:'Occupying or controlling d4/e4/d5/e5 gives your pieces range and space. Fight for the centre in the opening.'},
+  {name:'Passed pawn', def:'A pawn no enemy pawn can stop from promoting. In the endgame, push it — “passed pawns must be pushed”.'},
+  {name:'Zwischenzug', def:'An “in-between” move: instead of the expected recapture, you insert a more forcing move (usually a check) first, then take.'},
+];
+function renderConcepts(){
+  const body=document.getElementById('conceptsbody');
+  body.innerHTML=CONCEPTS.map(c=>`<div class="cpt"><div class="cpt-h"><b>${escapeHtml(c.name)}</b>${c.theme?`<button class="primary" data-cdrill="${c.theme}">Drill</button>`:''}</div><div class="cpt-d">${escapeHtml(c.def)}</div></div>`).join('');
+  body.querySelectorAll('[data-cdrill]').forEach(b=> b.onclick=()=>{ closeConcepts(); startPuzzles(b.dataset.cdrill); });
+}
+function openConcepts(){ renderConcepts(); document.getElementById('conceptsview').style.display='flex'; }
+function closeConcepts(){ document.getElementById('conceptsview').style.display='none'; }
+document.getElementById('conceptsbtn').onclick=openConcepts;
+document.getElementById('conceptsclose').onclick=closeConcepts;
+document.getElementById('conceptsview').onclick=e=>{ if(e.target.id==='conceptsview') closeConcepts(); };
+
+/* ---------- Position editor: place pieces, then analyse from that position ---------- */
+const editorEl = document.getElementById('editor');
+const paletteEl = document.getElementById('palette');
+// Build the piece palette once (white row, black row, then an eraser).
+['w','b'].forEach(color=>{
+  ['K','Q','R','B','N','P'].forEach(T=>{
+    const b=document.createElement('div');
+    b.className='pbtn'; b.dataset.color=color; b.dataset.type=T.toLowerCase();
+    const img=document.createElement('img'); img.src=PIECES[color+T]; img.alt=color+T;
+    b.appendChild(img);
+    b.onclick=()=>selectBrush({type:T.toLowerCase(), color}, b);
+    paletteEl.appendChild(b);
+  });
+});
+const eraseBtn=document.createElement('div');
+eraseBtn.className='pbtn erase'; eraseBtn.textContent='🗑 Erase';
+eraseBtn.onclick=()=>selectBrush('erase', eraseBtn);
+paletteEl.appendChild(eraseBtn);
+
+function selectBrush(brush, el){
+  editSel = brush;
+  paletteEl.querySelectorAll('.pbtn').forEach(p=>p.classList.remove('sel'));
+  if(el) el.classList.add('sel');
+}
+function editPlace(sq){
+  if(editSel==='erase'){ game.remove(sq); render(); return; }
+  if(!editSel){ statusEl.textContent='Pick a piece from the palette first (or the eraser).'; return; }
+  if(editSel.type==='k'){   // only one king per side — replace any existing one
+    for(const s of ALL_SQUARES){ const p=game.get(s); if(p&&p.type==='k'&&p.color===editSel.color) game.remove(s); }
+  }
+  game.remove(sq);
+  game.put({type:editSel.type, color:editSel.color}, sq);
+  render();
+}
+function enterEdit(){
+  if(mode!=='coach') setMode('coach');       // editor belongs to the Coach view
+  if(play.on) stopPlay();
+  exitPuzzles();
+  exitReview(); clearPremove(); deselect(); clearArrows(); clearResults();
+  redo.length=0;
+  editSnapshot = game.fen();
+  editMode = true;
+  document.body.classList.add('editing');
+  editorEl.style.display='block';
+  document.getElementById('setup').textContent='✕ Close editor';
+  // seed the side-to-move radio from the current position
+  document.querySelector(`input[name="edturn"][value="${game.turn()}"]`).checked = true;
+  selectBrush(null, null);
+  render();
+  statusEl.textContent='Editing position — place pieces, set who moves, then “Start analysis”.';
+}
+function leaveEdit(){
+  editMode=false; editSel=null;
+  document.body.classList.remove('editing');
+  editorEl.style.display='none';
+  document.getElementById('setup').textContent='✎ Set up position';
+}
+function cancelEdit(){
+  if(editSnapshot) game.load(editSnapshot);
+  leaveEdit(); deselect(); clearArrows(); render(); analyze();
+}
+// Derive castling rights from king/rook home squares (standard editor behaviour).
+function deriveCastling(){
+  let c='';
+  const wk=game.get('e1');
+  if(wk&&wk.type==='k'&&wk.color==='w'){
+    const h=game.get('h1'); if(h&&h.type==='r'&&h.color==='w') c+='K';
+    const a=game.get('a1'); if(a&&a.type==='r'&&a.color==='w') c+='Q';
+  }
+  const bk=game.get('e8');
+  if(bk&&bk.type==='k'&&bk.color==='b'){
+    const h=game.get('h8'); if(h&&h.type==='r'&&h.color==='b') c+='k';
+    const a=game.get('a8'); if(a&&a.type==='r'&&a.color==='b') c+='q';
+  }
+  return c||'-';
+}
+// chess.js 0.10.3 load() doesn't check king counts or check-legality, so validate ourselves.
+function validateSetup(placement, turn){
+  const wk=(placement.match(/K/g)||[]).length, bk=(placement.match(/k/g)||[]).length;
+  if(wk!==1||bk!==1) return 'you need exactly one king of each colour';
+  const ranks=placement.split('/');
+  if(/[pP]/.test(ranks[0])||/[pP]/.test(ranks[7])) return 'pawns can’t sit on the 1st or 8th rank';
+  const other = turn==='w'?'b':'w';
+  const probe=new Chess();
+  if(probe.load(placement+' '+other+' - - 0 1') && probe.in_check())
+    return 'the side that just moved is left in check';
+  return null;
+}
+function applyEdit(){
+  const placement = game.fen().split(' ')[0];
+  const turn = document.querySelector('input[name="edturn"]:checked').value;
+  const err = validateSetup(placement, turn);
+  const fen = `${placement} ${turn} ${deriveCastling()} - 0 1`;
+  if(err || !new Chess().load(fen)){
+    statusEl.textContent='⚠ Illegal position — '+(err||'that arrangement isn’t a valid chess position')+'.';
+    return;
+  }
+  editSnapshot=null;
+  leaveEdit();
+  game.load(fen);
+  exitReview(); clearPremove(); redo.length=0; deselect(); clearArrows(); clearResults();
+  render(); analyze();
+}
+document.getElementById('setup').onclick=()=>{ editMode ? cancelEdit() : enterEdit(); };
+document.getElementById('ed-cancel').onclick=cancelEdit;
+document.getElementById('ed-apply').onclick=applyEdit;
+document.getElementById('ed-clear').onclick=()=>{ game.clear(); render(); };
+document.getElementById('ed-startpos').onclick=()=>{ game.reset(); document.querySelector('input[name="edturn"][value="w"]').checked=true; render(); };
+
+/* ---------- PGN review: step through a finished game ---------- */
+function exitReview(){ review=null; document.getElementById('nav').style.display='none'; }
+
+document.getElementById('loadpgn').onclick=()=>{
+  const pgn=document.getElementById('pgn').value.trim();
+  if(!pgn){ statusEl.textContent='Paste a PGN first.'; return; }
+  const tmp=new Chess();
+  if(!tmp.load_pgn(pgn, {sloppy:true})){ statusEl.textContent='⚠ Could not read that PGN. Copy the full game text (moves included).'; return; }
+  const hist=tmp.history({verbose:true});
+  if(!hist.length){ statusEl.textContent='⚠ That PGN has no moves.'; return; }
+  const fenM=pgn.match(/\[FEN\s+"([^"]+)"\]/);
+  exitPuzzles();
+  redo.length=0;
+  review={history:hist, startFen: fenM?fenM[1]:null, id:Date.now()};
+  reviewSeen=new Set();
+  document.getElementById('nav').style.display='inline-flex';
+  setPly(0);
+};
+function setPly(n){
+  if(!review) return;
+  ply=Math.max(0, Math.min(n, review.history.length));
+  if(review.startFen) game.load(review.startFen); else game.reset();
+  for(let i=0;i<ply;i++){ const m=review.history[i]; game.move({from:m.from,to:m.to,promotion:m.promotion}); }
+  sel=null; legalTargets=[]; clearPremove(); clearArrows();
+  const total=review.history.length;
+  const last = ply>0 ? review.history[ply-1] : null;
+  const num = ply>0 ? Math.floor((ply-1)/2)+1 + (review.history[ply-1].color==='w'?'.':'…') : '';
+  document.getElementById('movelabel').textContent =
+    ply===0 ? `start · 0/${total}` : `${num} ${last.san} · ${ply}/${total}`;
+  render(); analyze();
+}
+document.getElementById('first').onclick=()=>setPly(0);
+document.getElementById('prev').onclick =()=>setPly(ply-1);
+document.getElementById('next').onclick =()=>setPly(ply+1);
+document.getElementById('last').onclick =()=>setPly(review?review.history.length:0);
+// Arrow keys step through a loaded game (unless typing in a field).
+// Back/forward through moves — works in PGN review AND normal coach/analysis mode.
+function goBack(){
+  if(op.on && op.opening){ if(game.history().length){ game.undo(); opRefresh(); } return; }
+  if(puzMode){ if(puz && puz.done) puzGoto(puz.reviewPly-1); return; }
+  if(review){ setPly(ply-1); return; }
+  if(play.on){ return; }                     // during a live game use the Undo (takeback) button
+  const m = game.undo();                      // step one move back, remember it for "forward"
+  if(m){ redo.push(m); clearPremove(); deselect(); clearArrows(); render(); analyze(); }
+}
+function goForward(){
+  if(op.on && op.opening){ if(op.inBook && op.ply<opLine().moves.length) opGoto(op.ply+1); return; }
+  if(puzMode){ if(puz && puz.done) puzGoto(puz.reviewPly+1); return; }
+  if(review){ setPly(ply+1); return; }
+  if(play.on){ return; }
+  if(redo.length){
+    const m = redo.pop();
+    game.move({from:m.from, to:m.to, promotion:m.promotion});
+    clearPremove(); deselect(); clearArrows(); render(); analyze();
+  }
+}
+document.addEventListener('keydown',e=>{
+  const t=document.activeElement?.tagName;
+  if(t==='TEXTAREA'||t==='INPUT'||t==='SELECT') return;   // don't hijack typing
+  if(e.key==='ArrowLeft'){ goBack(); e.preventDefault(); }
+  else if(e.key==='ArrowRight'){ goForward(); e.preventDefault(); }
+});
+
+// Re-analyze automatically, but never run two analyses at once.
+let analyzing=false, pending=false;
+async function analyze(){
+  if(play.on || (puzMode && !(puz && puz.done))) return;  // hidden while playing Maia or mid-puzzle; shown once solved
+  if(analyzing){ pending=true; return; }
+  analyzing=true;
+  try{ await runAnalyze(); }
+  catch(e){ statusEl.textContent='Error: '+e.message; }
+  finally{ analyzing=false; if(pending){ pending=false; analyze(); } else if(op.on && op.opening){ opOverlayArrows(); } }
+}
+
+/* ---------- Stockfish (runs on the local server) ---------- */
+// Returns {best, lines:[{uci, cp, mate}]} from /eval. If `moves` given,
+// Stockfish evaluates exactly those moves (so traps get a real eval too).
+async function analyzeEngine(fen, moves){
+  const q = (moves && moves.length) ? `&moves=${moves.join(',')}` : '';
+  const r = await fetch(`/eval?fen=${encodeURIComponent(fen)}${q}`,{cache:'no-store'});
+  if(!r.ok) throw new Error('eval '+r.status);
+  const j = await r.json();
+  if(j.error) throw new Error(j.error);
+  return j;
+}
+
+/* ---------- Lichess rating-filtered stats (optional win-rate badge; capped so it never stalls) ---------- */
+async function lichessStats(fen, ratings, speeds){
+  const u = `https://explorer.lichess.ovh/lichess?variant=standard&fen=${encodeURIComponent(fen)}&ratings=${ratings}&speeds=${speeds}&topGames=0&recentGames=0`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), 1200);   // don't let Lichess hold up coaching
+  try{
+    const r = await fetch(u, {signal:ctrl.signal});
+    if(!r.ok) throw new Error('lichess '+r.status);
+    return await r.json();
+  } finally { clearTimeout(timer); }
+}
+
+/* ---------- Combine + score ---------- */
+function scoreCp(l){ // side-to-move centipawns; mate -> big number
+  if(l.mate!=null) return l.mate>0 ? 100000-l.mate : -100000-l.mate;
+  return l.cp ?? -99999;
+}
+
+/* ---------- Plain-language "why" for a move ----------
+   Derives reasons ONLY from verifiable signals — the move's own effect
+   (capture/check/mate/castle/promotion), the material swing over Stockfish's
+   principal variation, tactical forks, and opening development. Never invents a
+   reason it can't confirm; returns '' when it has nothing solid to say. */
+const PVAL = {p:1,n:3,b:3,r:5,q:9,k:0};
+const PNAME = {p:'pawn',n:'knight',b:'bishop',r:'rook',q:'queen',k:'king'};
+function _material(g,color){ let s=0; for(const sq of ALL_SQUARES){ const p=g.get(sq); if(p&&p.color===color) s+=PVAL[p.type]; } return s; }
+// lc0/Maia may encode castling as king-onto-rook (e1h1/e8a8); chess.js wants the
+// king-two-squares form. Normalise so SAN + explanations don't choke on it.
+function normUci(fen, uci){
+  if(!uci||uci.length<4) return uci;
+  const seg=uci.slice(0,4), map={e1h1:'e1g1',e1a1:'e1c1',e8h8:'e8g8',e8a8:'e8c8'};
+  if(map[seg]){ try{ const g=new Chess(); if(g.load(fen)){ const p=g.get(seg.slice(0,2)); if(p&&p.type==='k') return map[seg]+uci.slice(4); } }catch(e){} }
+  return uci;
+}
+function _mv(g, uci){ const u=normUci(g.fen(), uci); return g.move({from:u.slice(0,2),to:u.slice(2,4),promotion:u.length>4?u[4]:undefined}); }
+// Net material the mover gains once Stockfish's whole line (pv) is played out.
+function materialGainFromLine(fenBefore, pv, color){
+  if(!pv) return 0;
+  const g=new Chess(); if(!g.load(fenBefore)) return 0;
+  const other = color==='w'?'b':'w';
+  const before=_material(g,color)-_material(g,other);
+  for(const u of pv.split(' ')){ const m=_mv(g,u); if(!m) break; }
+  return (_material(g,color)-_material(g,other)) - before;
+}
+// After the move, does the piece on `sq` attack 2+ valuable enemy pieces?
+function detectFork(gAfter, sq, color, gaveCheck){
+  const parts=gAfter.fen().split(' '); parts[1]=color; parts[3]='-';
+  const probe=new Chess(); if(!probe.load(parts.join(' '))) return null;
+  let ms; try{ ms=probe.moves({square:sq, verbose:true}); }catch(e){ return null; }
+  const hit=[];
+  for(const m of ms){ if(m.flags.includes('c')){ const cap=probe.get(m.to); if(cap && PVAL[cap.type]>=3) hit.push(PNAME[cap.type]); } }
+  if(gaveCheck && hit.length>=1) return 'forks the king and the '+hit[0];
+  if(hit.length>=2) return 'forks the '+hit[0]+' and '+hit[1];
+  return null;
+}
+function describeGain(g){ return g>=9?'a queen’s worth of material':g>=5?'a rook’s worth of material':g>=3?'a piece':g>=2?'material (about 2 pawns)':'a pawn'; }
+function explainMove(fenBefore, uci, line){
+  const g=new Chess(); if(!g.load(fenBefore)) return '';
+  const nu=normUci(fenBefore, uci), from=nu.slice(0,2), to=nu.slice(2,4), promo=nu.length>4?nu[4]:undefined;
+  const mv=g.move({from,to,promotion:promo}); if(!mv) return '';
+  if(mv.san.includes('#')) return 'delivers checkmate.';
+  const gaveCheck=mv.san.includes('+');
+  const reasons=[];
+  if(line && line.mate!=null && line.mate>0) reasons.push('forces mate in '+line.mate);
+  const gain = line ? materialGainFromLine(fenBefore, line.pv, mv.color) : 0;
+  if(gain>=1) reasons.push('wins '+describeGain(gain));
+  else if(mv.captured && PVAL[mv.captured]>=3) reasons.push('captures the '+PNAME[mv.captured]);
+  const fork = detectFork(g, to, mv.color, gaveCheck);
+  if(fork && !reasons.some(r=>r.startsWith('wins'))) reasons.push(fork);
+  if(gaveCheck && !fork && !reasons.length) reasons.push('gives check');
+  if(mv.flags.includes('k')||mv.flags.includes('q')) reasons.push('castles the king into safety');
+  if(mv.flags.includes('p')) reasons.push('promotes to a '+PNAME[promo||'q']);
+  if(!reasons.length){                                  // quiet move — positional reasons
+    const backRank = mv.color==='w'?'1':'8';
+    const moveNo = +(fenBefore.split(' ')[5]||1);
+    if((mv.piece==='n'||mv.piece==='b') && from[1]===backRank && moveNo<=12) reasons.push('develops the '+PNAME[mv.piece]);
+    else if(mv.piece==='p' && ['d4','e4','d5','e5'].includes(to)) reasons.push('stakes a claim in the centre');
+    else if(mv.piece==='k' && moveNo<=16) reasons.push('improves king safety');
+  }
+  if(!reasons.length) return '';
+  const s = reasons.join(' and ');
+  return s.charAt(0).toUpperCase()+s.slice(1)+'.';
+}
+
+/* ---------- "Reading the position": name the concepts in play (honest signals) ---------- */
+function positionSignals(fen, eng, turn){
+  const out=[];
+  // Engine verdict (who stands better)
+  if(eng && eng.best){
+    const side=turn==='w'?'White':'Black', opp=turn==='w'?'Black':'White';
+    if(eng.best.mate!=null){ out.push(`${(eng.best.mate>0?side:opp)} has a forced mate`); }
+    else { const s=scoreCp(eng.best), a=Math.abs(s), who=s>=0?side:opp;
+      out.push(a<40?'The position is roughly equal':a<120?`${who} is slightly better`:a<300?`${who} is clearly better`:`${who} is winning`); }
+  }
+  // Material balance (from the board)
+  const md=_material(game,'w')-_material(game,'b');
+  if(md!==0) out.push(`${md>0?'White':'Black'} is up ${Math.abs(md)} point${Math.abs(md)>1?'s':''} of material`);
+  else out.push('Material is level');
+  // King safety
+  const mn=+(fen.split(' ')[5]||1);
+  if(mn>=10){
+    const wk=game.get('e1'), bk=game.get('e8');
+    if(wk&&wk.type==='k'&&wk.color==='w') out.push('White’s king is still uncastled');
+    if(bk&&bk.type==='k'&&bk.color==='b') out.push('Black’s king is still uncastled');
+  }
+  // Initiative (lots of forcing moves + standing better)
+  const forcing=game.moves({verbose:true}).filter(m=>m.san.includes('+')||m.flags.includes('c')).length;
+  if(forcing>=4 && eng && eng.best && scoreCp(eng.best)>=30)
+    out.push(`${turn==='w'?'White':'Black'} holds the initiative (${forcing} forcing moves in hand)`);
+  return out;
+}
+
+document.getElementById('analyze').onclick = analyze;
+
+const MAIA_URL = '/maia';
+// UI band (lower bound) -> nearest Maia net that exists (1100..1900)
+function maiaNet(band){
+  const lo = +band.split(',')[0];
+  if(lo<=1000) return 1100;
+  if(lo<=1200) return 1300;
+  if(lo<=1400) return 1500;
+  if(lo<=1600) return 1700;
+  return 1900;
+}
+async function maiaFetch(fen, net){
+  const r = await fetch(`${MAIA_URL}?fen=${encodeURIComponent(fen)}&rating=${net}`,{cache:'no-store'});
+  if(!r.ok) throw new Error('maia '+r.status);
+  const j = await r.json();
+  if(j.error) throw new Error(j.error);
+  return j; // {net, bestmove, moves:[{uci,p}]}
+}
+
+async function runAnalyze(){
+  // NOTE: don't clear the results panel here — that leaves it empty during the
+  // ~250ms fetch, so the panel collapses and the page visibly "bounces" every
+  // move. Keep the previous analysis on screen; it's replaced atomically once
+  // the new one is ready (see `resultsEl.innerHTML=''` just before the rebuild).
+  if(game.game_over()){
+    clearResultsKeepStatus();
+    clearArrows();
+    if(game.in_checkmate()) setEval(game.turn()==='w' ? -100000 : 100000, 'M');  // side to move is mated
+    else setEval(0, '½-½');                                                        // stalemate/draw
+    statusEl.textContent='Game is over — no move to coach.'; return;
+  }
+  const fen = game.fen();
+  const turn = game.turn();
+  const band = document.getElementById('rating').value;
+  const speeds = document.getElementById('speed').value;
+  const ratingLabel = document.getElementById('rating').selectedOptions[0].textContent;
+  const net = maiaNet(band);
+  const playedUci = (review && ply < review.history.length)
+    ? (review.history[ply].from+review.history[ply].to+(review.history[ply].promotion||'')) : '';
+
+  // Cache: revisiting a position (arrow-key nav, re-analyze) is instant.
+  const key = fen+'|'+net+'|'+band+'|'+speeds+'|'+playedUci;
+  let data = analysisCache.get(key), maia, eng, stats;
+  if(data){
+    ({maia, eng, stats} = data);
+  } else {
+    statusEl.textContent = `Asking Maia-${net}…`;
+    maia = await maiaFetch(fen, net).catch(e=>({__err:e.message}));
+    if(fen !== game.fen()) return;   // position changed while waiting — a newer analysis will run
+    if(!maia.__err && maia.moves.length) statusEl.textContent = `Analyzing with Maia-${net} + Stockfish…`;
+
+    const evalMoves = maia.__err ? null : maia.moves.slice(0,6).map(m=>m.uci);
+    if(evalMoves && playedUci && !evalMoves.includes(playedUci)) evalMoves.push(playedUci);
+    [eng, stats] = await Promise.all([
+      analyzeEngine(fen, evalMoves).catch(()=>null),
+      lichessStats(fen, band, speeds).catch(()=>null)
+    ]);
+    if(fen !== game.fen()) return;   // stale result — discard
+    if(!maia.__err && eng){          // only cache complete results
+      analysisCache.set(key, {maia, eng, stats});
+      if(analysisCache.size > 300) analysisCache.delete(analysisCache.keys().next().value);
+    }
+  }
+
+  // Stockfish eval map (soundness) + update the eval bar
+  const engMap = {}; let bestCp = null;
+  if(eng){ bestCp = scoreCp(eng.best); eng.lines.forEach(l=>{ if(l.uci) engMap[l.uci]=scoreCp(l); }); setEvalFromEngine(eng, turn); }
+
+  // Lichess real-world win rate map (bonus signal), keyed by uci
+  const liMap = {};
+  if(stats){
+    stats.moves.forEach(m=>{
+      const g = m.white+m.draws+m.black;
+      const w = turn==='w'? m.white : m.black;
+      liMap[m.uci] = { win: g? w/g : null, games: g };
+    });
+  }
+
+  render(); resultsEl.innerHTML='';
+
+  // If Maia server is down, fall back to the Lichess-only method.
+  if(maia.__err){ return analyzeLichessFallback(turn, ratingLabel, eng, engMap, bestCp, stats, maia.__err); }
+
+  const cands = maia.moves.map(m=>({
+    uci:m.uci, san:uciToSan(m.uci), p:m.p,
+    cp: engMap[m.uci] ?? null,
+    win: liMap[m.uci]?.win ?? null,
+    games: liMap[m.uci]?.games ?? null
+  }));
+  cands.forEach(c=>{ c.loss = (bestCp!=null && c.cp!=null)? bestCp-c.cp : null; });
+
+  statusEl.textContent = `Maia-${net}: what a ${ratingLabel} player is most likely to play here, filtered for soundness by Stockfish.`;
+
+  const SOUND = 60; // centipawn loss still counted as sound
+  const sound = cands.filter(c=> c.loss==null || c.loss<=SOUND);
+  const pool = sound.length ? sound : cands;
+  const pick = pool.slice().sort((a,b)=>b.p-a.p)[0];               // most human-likely sound move
+  const alts = pool.filter(c=>c!==pick).sort((a,b)=>b.p-a.p).slice(0,2);
+  const traps = cands.filter(c=> c.p>=0.08 && c.loss!=null && c.loss>=180 && c!==pick)
+                     .sort((a,b)=>b.p-a.p);
+
+  // Opponent's expected best response to the recommended move (from Stockfish's PV).
+  const replyMap = {}, lineMap = {};
+  if(eng) eng.lines.forEach(l=>{ if(l.uci){ replyMap[l.uci]=l.reply; lineMap[l.uci]=l; } });
+  const pickReply = pick ? replyMap[pick.uci] : null;
+  const explain = c => explainMove(fen, c.uci, lineMap[c.uci]);
+
+  // When reviewing a PGN: the move actually played from this position, graded by Stockfish.
+  const actual = (review && ply < review.history.length) ? review.history[ply] : null;
+  const actualUci = actual ? actual.from+actual.to+(actual.promotion||'') : null;
+  const actualLoss = (actualUci && bestCp!=null && engMap[actualUci]!=null) ? bestCp-engMap[actualUci] : null;
+  // Log game mistakes by phase (once per position) to feed the study plan.
+  if(actual && actualLoss!=null && actualLoss>90 && review){
+    const k=(review.id||0)+':'+ply;
+    if(!reviewSeen.has(k)){ reviewSeen.add(k); progress.reviewMistakes[gamePhase()]=(progress.reviewMistakes[gamePhase()]||0)+1; saveProgress(); }
+  }
+
+  // Draw the recommendation on the board as arrows.
+  lastArrows = [];
+  const arrow=(c,color,width,dash)=> lastArrows.push({from:c.uci.slice(0,2),to:c.uci.slice(2,4),color,width,dash});
+  if(pick) arrow(pick,'#4ade80',0.24);
+  if(pickReply) lastArrows.push({from:pickReply.slice(0,2),to:pickReply.slice(2,4),color:'#c084fc',width:0.16});
+  alts.forEach(c=> arrow(c,'#6ea8fe',0.12));
+  traps.slice(0,2).forEach(c=> arrow(c,'#f87171',0.12));
+  if(eng && eng.best && pick && eng.best.uci!==pick.uci) arrow({uci:eng.best.uci},'#fbbf24',0.12,true);
+  if(actualUci && (!pick || actualUci!==pick.uci)) lastArrows.push({from:actual.from,to:actual.to,color:'#94a3b8',width:0.10});
+  drawArrows();
+
+  let html = `<div class="legend">
+      <span><i style="background:#4ade80"></i>best for you</span>
+      <span><i style="background:#c084fc"></i>opponent's reply</span>
+      <span><i style="background:#6ea8fe"></i>alternative</span>
+      <span><i style="background:#f87171"></i>common mistake</span>
+      <span><i style="background:#fbbf24"></i>engine's pick</span>
+      ${actual?'<span><i style="background:#94a3b8"></i>played in game</span>':''}</div>`;
+  // In review mode, lead with what was actually played vs the recommendation.
+  if(actual){
+    const matched = pick && actualUci===pick.uci;
+    const lossTxt = actualLoss!=null
+      ? (actualLoss<=30?'a fine choice':actualLoss<=90?`slightly inaccurate (−${(actualLoss/100).toFixed(1)})`:`a mistake (−${(actualLoss/100).toFixed(1)} pawns)`)
+      : '';
+    html += `<div class="rec ${matched?'top':''}" style="border-color:${matched?'var(--good)':'#94a3b8'}">
+      <div class="mv">Played: ${actual.san}</div>
+      <div class="why">${matched ? '✅ You played the move a player your level should — nice.' :
+        `The tool recommends <b>${pick.san}</b> here${lossTxt?` — your move was ${lossTxt}`:''}.`}</div></div>`;
+  }
+  html += `<div class="sectitle">Best move for a ${ratingLabel} player</div>` + recCard(pick, true, explain(pick));
+  if(pickReply){
+    html += `<div class="engine" style="margin:-4px 0 12px">Then expect the opponent to reply
+      <b>${sanAfter(pick.uci, pickReply)}</b> <span style="color:#c084fc">(purple arrow)</span>.</div>`;
+  }
+  const signals = positionSignals(fen, eng, turn);
+  if(signals.length){
+    html += `<div class="sectitle">Reading the position</div><div class="engine">${signals.map(escapeHtml).join(' &nbsp;·&nbsp; ')}</div>`;
+  }
+  if(alts.length){
+    html += `<div class="sectitle">Other sound moves your level often plays</div>`;
+    alts.forEach(c=> html += recCard(c,false, explain(c)));
+  }
+  if(traps.length){
+    html += `<div class="sectitle">⚠ Your level’s common mistakes here</div>`;
+    traps.slice(0,2).forEach(c=>{
+      html += `<div class="warnbox"><span class="mv">${c.san}</span> — Maia-${net} says
+        ${(c.p*100).toFixed(0)}% of players at your level would play this, but Stockfish says it loses
+        ~${(c.loss/100).toFixed(1)} pawns. Train yourself out of it.</div>`;
+    });
+  }
+  if(eng && eng.best){
+    const engSan = uciToSan(eng.best.uci);
+    const same = pick.uci===eng.best.uci;
+    const engInMaia = cands.find(c=>c.uci===eng.best.uci);
+    html += `<div class="sectitle">Aspirational — the engine’s top choice</div>
+      <div class="engine">Stockfish prefers <b>${engSan}</b>${same?' — the same move Maia expects from you. 🎯':
+      '. ' + (engInMaia? `Only ${(engInMaia.p*100).toFixed(0)}% of players at your level find it`
+                       : 'Almost no one at your level plays it') + ' — a good move to study.'}</div>`;
+  }
+  resultsEl.innerHTML = html;
+}
+
+// Fallback when the Maia server isn't running: rank by Lichess rating-band popularity.
+function analyzeLichessFallback(turn, ratingLabel, eng, engMap, bestCp, stats, err){
+  statusEl.innerHTML = `⚠ Maia server not reachable (${err}). Using Lichess rating stats instead — ` +
+    `start Maia with <code>python maia_server.py</code> for true per-rating predictions.`;
+  if(!stats || !stats.moves.length){
+    lastArrows=[];
+    if(eng && eng.best){ lastArrows.push({from:eng.best.uci.slice(0,2),to:eng.best.uci.slice(2,4),color:'#fbbf24',width:0.2}); }
+    drawArrows();
+    resultsEl.innerHTML = eng ? `<div class="sectitle">Engine best (no human data)</div>
+      <div class="rec top"><div class="mv">${uciToSan(eng.best.uci)}</div>
+      <div class="why">Stockfish’s top move — treat as aspirational.</div></div>` : '';
+    return;
+  }
+  const tot = stats.moves.reduce((s,m)=>s+m.white+m.draws+m.black,0);
+  const cands = stats.moves.map(m=>{
+    const g=m.white+m.draws+m.black, w = turn==='w'?m.white:m.black;
+    return { san:m.san, uci:m.uci, p:tot?g/tot:0, win:g?w/g:null, games:g, cp:engMap[m.uci]??null };
+  });
+  cands.forEach(c=> c.loss=(bestCp!=null&&c.cp!=null)?bestCp-c.cp:null);
+  const good = cands.filter(c=> c.p>=0.04 && (c.loss==null||c.loss<=60)).sort((a,b)=>(b.win-a.win)||(b.p-a.p));
+  const pick = good[0] || cands.slice().sort((a,b)=>b.p-a.p)[0];
+  const alts0 = good.filter(c=>c!==pick).slice(0,2);
+  lastArrows=[];
+  if(pick) lastArrows.push({from:pick.uci.slice(0,2),to:pick.uci.slice(2,4),color:'#4ade80',width:0.24});
+  alts0.forEach(c=> lastArrows.push({from:c.uci.slice(0,2),to:c.uci.slice(2,4),color:'#6ea8fe',width:0.12}));
+  drawArrows();
+  let html = `<div class="sectitle">Best move for ${ratingLabel} (Lichess data)</div>` + recCard(pick,true);
+  const alts = good.filter(c=>c!==pick).slice(0,2);
+  if(alts.length){ html+=`<div class="sectitle">Solid alternatives</div>`; alts.forEach(c=>html+=recCard(c,false)); }
+  resultsEl.innerHTML = html;
+}
+
+function recCard(c,isTop,why2){
+  const badges=[];
+  badges.push(`<span class="badge b-pop">${(c.p*100).toFixed(0)}% of your level play this</span>`);
+  if(c.loss!=null && c.loss<=60) badges.push('<span class="badge b-sound">✓ Sound</span>');
+  else if(c.loss!=null && c.loss>180) badges.push('<span class="badge b-bad">Risky</span>');
+  if(c.win!=null){
+    const wc = c.win>=0.52?'b-win':c.win<0.45?'b-bad':'b-warn';
+    badges.push(`<span class="badge ${wc}">${(c.win*100).toFixed(0)}% real win rate</span>`);
+  }
+  // Lead with the concrete chess reason when we have one; the badges already
+  // convey "typical for your level" + "sound".
+  const why = why2
+    ? why2 + (isTop ? ' It’s also the move players at your level most often find.' : '')
+    : (isTop
+        ? `The move a player at your exact level is most likely to find — and Stockfish agrees it’s sound.`
+        : `Also natural at your level and sound.`);
+  return `<div class="rec ${isTop?'top':''}">
+    <div class="mv">${c.san}</div>
+    <div class="why">${why}</div>
+    <div class="badges">${badges.join('')}</div></div>`;
+}
+
+function uciToSan(uci){
+  if(!uci) return '?';
+  const tmp = new Chess(game.fen());
+  const m = _mv(tmp, uci);
+  return m? m.san : uci;
+}
+
+// SAN of `replyUci` played AFTER `moveUci` from the current position.
+function sanAfter(moveUci, replyUci){
+  const tmp = new Chess(game.fen());
+  _mv(tmp, moveUci);
+  const m = _mv(tmp, replyUci);
+  return m ? m.san : replyUci;
+}
+
+function clearResultsKeepStatus(){ resultsEl.innerHTML=''; }
+
+// Rating/time-control changes re-coach; in Puzzles they fetch a fresh puzzle at the new level.
+document.getElementById('rating').onchange = ()=>{ if(mode==='puzzles') loadNextPuzzle(); else analyze(); };
+document.getElementById('speed').onchange = analyze;
+document.getElementById('difficulty').onchange = ()=>{ if(mode==='puzzles') loadNextPuzzle(); };
+
+render();
+updateEvalBar();            // draw the eval bar at 0.0
+updateEvalBarVisibility();  // (coach mode → visible)
+analyze();                  // start coaching immediately
+</script>
