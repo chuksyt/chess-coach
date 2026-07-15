@@ -47,7 +47,14 @@ a coach one or two levels above you, instead of an oracle you can't relate to.
 - **Play vs. Maia** — practise against a human-like opponent at a chosen rating.
 - Fully keyboard-navigable review, move sounds, light/dark theme.
 
-## Screenshot
+## Demo
+
+![Chess Coach analysing a game live](docs/demo.gif)
+
+*Playing through a Ruy Lopez. The coach re-analyses after **every** move, drawing
+the best rating-appropriate move (green arrow), the opponent's likely reply
+(purple), and alternatives — each labelled with the share of players at your level
+who actually play it, and whether Stockfish considers it sound.*
 
 ![Chess Coach reviewing a position](docs/screenshot.png)
 
